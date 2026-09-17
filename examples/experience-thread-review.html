@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Moraine · 发展线核对演练</title>
+  <style>
+    :root { color-scheme: light; font-family: ui-sans-serif, system-ui, sans-serif; background:#eeeae2; color:#252722; }
+    * { box-sizing:border-box; }
+    body { margin:0; padding:24px 14px 48px; }
+    main { width:min(100%, 620px); margin:auto; }
+    header { margin-bottom:22px; }
+    h1 { margin:5px 0 8px; font-size:28px; }
+    .kicker,.safe { color:#5e6f60; font-size:12px; letter-spacing:.08em; text-transform:uppercase; }
+    .intro { color:#5d6058; line-height:1.6; }
+    .panel { background:#faf9f5; border:1px solid #d8d4c9; border-radius:18px; padding:16px; box-shadow:0 10px 30px #4b503d12; }
+    .panel-head,.result { display:flex; justify-content:space-between; gap:12px; align-items:center; }
+    .panel-head strong { font-size:18px; }
+    .panel-head span,.result { color:#676b62; font-size:13px; }
+    ol { list-style:none; padding:0; margin:16px 0; display:grid; gap:10px; }
+    li { position:relative; }
+    label { display:grid; grid-template-columns:auto 1fr auto; gap:12px; align-items:center; padding:14px; border-radius:14px; background:#f1f0e9; border:1px solid transparent; cursor:pointer; }
+    label:has(input:checked) { background:#e7eee5; border-color:#9eaf9c; }
+    input { width:20px; height:20px; accent-color:#506d56; }
+    .copy { display:grid; gap:4px; }
+    .copy small { color:#74776e; }
+    .score { font-variant-numeric:tabular-nums; color:#506d56; }
+    button { width:100%; border:0; border-radius:13px; padding:13px 16px; background:#344d39; color:white; font:inherit; font-weight:700; cursor:pointer; }
+    button:disabled { opacity:.45; cursor:not-allowed; }
+    .result { margin-top:13px; padding-top:13px; border-top:1px solid #dedbd1; align-items:flex-start; }
+    .result output { color:#30332e; text-align:right; overflow-wrap:anywhere; }
+    .excluded { margin-top:14px; color:#777a72; font-size:12px; }
+    [hidden] { display:none !important; }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <span class="kicker">Synthetic rehearsal · read only</span>
+      <h1>发展线成员核对</h1>
+      <p class="intro">砾砾只提出可能相关的坐标点。你可以排除误匹配；确认结果只停留在本页，刷新即复原。</p>
+    </header>
+    <section class="panel" aria-labelledby="threadTitle">
+      <div class="panel-head"><strong id="threadTitle">读取中</strong><span class="safe">未写入</span></div>
+      <ol id="candidates" aria-live="polite"></ol>
+      <button id="confirm" type="button" disabled>确认核对结果</button>
+      <div class="result"><span>本次人工选择</span><output id="selection">尚未确认</output></div>
+      <p class="excluded" id="excluded"></p>
+    </section>
+  </main>
+  <script>
+    const list = document.querySelector('#candidates');
+    const confirm = document.querySelector('#confirm');
+    const selection = document.querySelector('#selection');
+    const excluded = document.querySelector('#excluded');
+    const title = document.querySelector('#threadTitle');
+
+    function selectedIds() {
+      return [...list.querySelectorAll('input:checked')].map(input => input.value);
+    }
+
+    fetch('./experience-thread-review.preview.json', { cache: 'no-store' })
+      .then(response => { if (!response.ok) throw new Error('fixture unavailable'); return response.json(); })
+      .then(preview => {
+        if (preview.persisted !== false || preview.writes.length || !preview.requires_review) throw new Error('unsafe preview');
+        title.textContent = preview.title;
+        preview.points.forEach(point => {
+          const item = document.createElement('li');
+          const label = document.createElement('label');
+          const input = document.createElement('input');
+          const copy = document.createElement('span');
+          const strong = document.createElement('strong');
+          const small = document.createElement('small');
+          const score = document.createElement('span');
+          input.type = 'checkbox'; input.value = point.memory_id; input.checked = true;
+          strong.textContent = point.title;
+          small.textContent = `${point.observed_at.slice(0, 10)} · ${point.source.ref}`;
+          score.className = 'score'; score.textContent = point.similarity.toFixed(2);
+          copy.className = 'copy'; copy.append(strong, small); label.append(input, copy, score); item.append(label); list.append(item);
+        });
+        excluded.textContent = `系统已排除 ${preview.excluded.length} 项；不会展示其他空间正文。`;
+        confirm.disabled = false;
+      })
+      .catch(() => {
+        title.textContent = '无法读取合成演练';
+        excluded.textContent = '没有使用真实记忆或伪造结果替代。';
+      });
+
+    confirm.addEventListener('click', () => {
+      const ids = selectedIds();
+      selection.textContent = ids.length ? ids.join(' · ') : '未选择成员';
+    });
+  </script>
+</body>
+</html>

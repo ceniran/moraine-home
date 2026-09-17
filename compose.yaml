@@ -1,0 +1,56 @@
+services:
+  workbench:
+    build: .
+    command: ["moraine-beta"]
+    environment:
+      MORAINE_BETA_HOST: 0.0.0.0
+      MORAINE_BETA_PORT: 4790
+      MORAINE_BETA_TOKEN: ${MORAINE_BETA_TOKEN:?set MORAINE_BETA_TOKEN in .env}
+      MORAINE_BETA_DATA_FILE: /data/beta-store.json
+      MORAINE_BETA_SEED_FILE: /app/src/moraine/data/beta-seed.json
+      MORAINE_BETA_WEB_ROOT: /app/src/moraine/static
+      MORAINE_SEMANTIC_URL: http://semantic:4781
+      MORAINE_SEMANTIC_TOKEN: ${MORAINE_API_TOKEN:?set MORAINE_API_TOKEN in .env}
+    volumes:
+      - moraine-data:/data
+    ports:
+      - 127.0.0.1:${MORAINE_BETA_PORT:-4790}:4790
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4790/api/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  semantic:
+    build: .
+    command: ["moraine"]
+    environment:
+      MORAINE_HOST: 0.0.0.0
+      MORAINE_PORT: 4781
+      MORAINE_API_TOKEN: ${MORAINE_API_TOKEN:?set MORAINE_API_TOKEN in .env}
+      MORAINE_MODEL: ${MORAINE_MODEL:-BAAI/bge-small-zh-v1.5}
+      MORAINE_MODEL_CACHE: /models
+      MORAINE_INDEX_DIR: /data/index
+      MORAINE_SOURCE_MODE: json
+      MORAINE_JSON_PATH: /data/beta-store.json
+      MORAINE_THREADS: ${MORAINE_THREADS:-2}
+      MORAINE_BATCH_SIZE: ${MORAINE_BATCH_SIZE:-4}
+      MORAINE_REFRESH_SECONDS: ${MORAINE_REFRESH_SECONDS:-30}
+    volumes:
+      - moraine-data:/data
+      - moraine-models:/models
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    depends_on:
+      workbench:
+        condition: service_healthy
+
+volumes:
+  moraine-data:
+  moraine-models:

@@ -1,0 +1,34 @@
+[Unit]
+Description=Moraine local semantic index
+After=network.target
+
+[Service]
+Type=simple
+User=moraine
+Group=moraine
+WorkingDirectory=/opt/moraine
+EnvironmentFile=/etc/moraine.env
+ExecStart=/opt/moraine/.venv/bin/moraine
+Restart=on-failure
+RestartSec=5
+UMask=0077
+MemoryHigh=420M
+MemoryMax=512M
+CPUQuota=150%
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectControlGroups=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ReadWritePaths=/opt/moraine/data /opt/moraine/models
+
+[Install]
+WantedBy=multi-user.target

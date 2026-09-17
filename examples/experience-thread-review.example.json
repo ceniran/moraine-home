@@ -1,0 +1,86 @@
+{
+  "config": {
+    "thread_id": "werewolf.action-timing",
+    "title": "狼人杀行动时机",
+    "workspace": "personal",
+    "anchor_ids": ["game-2"],
+    "min_score": 0.8
+  },
+  "retrieval_results": [
+    {"id": "game-2", "score": 0.91},
+    {"id": "game-1", "score": 0.86},
+    {"id": "game-low", "score": 0.55},
+    {"id": "game-foreign", "score": 0.9}
+  ],
+  "records": [
+    {
+      "id": "game-2",
+      "workspace": "personal",
+      "created_at": "2026-08-31T14:00:00Z",
+      "source": {"type": "game", "ref": "werewolf:synthetic-2"},
+      "title": "终局重新核对整局行为",
+      "kind": "reflection",
+      "content": "synthetic content withheld from preview"
+    },
+    {
+      "id": "game-1",
+      "workspace": "personal",
+      "created_at": "2026-08-23T13:00:00Z",
+      "source": {"type": "game", "ref": "werewolf:synthetic-1"},
+      "title": "把事实、推理与猜测分开",
+      "kind": "reflection",
+      "content": "synthetic content withheld from preview"
+    },
+    {
+      "id": "game-low",
+      "workspace": "personal",
+      "created_at": "2026-08-20T12:00:00Z",
+      "source": {"type": "game", "ref": "werewolf:synthetic-low"},
+      "title": "相关性不足的牌局",
+      "kind": "event"
+    },
+    {
+      "id": "game-foreign",
+      "workspace": "other",
+      "created_at": "2026-08-25T12:00:00Z",
+      "source": {"type": "game", "ref": "werewolf:synthetic-foreign"},
+      "title": "其他空间的牌局",
+      "kind": "event"
+    }
+  ],
+  "preview": {
+    "mode": "read_only_review",
+    "thread_id": "werewolf.action-timing",
+    "title": "狼人杀行动时机",
+    "workspace": "personal",
+    "status": "pending_review",
+    "proposed_member_ids": ["game-1", "game-2"],
+    "excluded": [
+      {"memory_id": "game-low", "reason": "below_min_score"},
+      {"memory_id": "game-foreign", "reason": "workspace_mismatch"}
+    ],
+    "points": [
+      {
+        "memory_id": "game-1",
+        "observed_at": "2026-08-23T13:00:00Z",
+        "source": {"type": "game", "ref": "werewolf:synthetic-1"},
+        "similarity": 0.86,
+        "title": "把事实、推理与猜测分开",
+        "kind": "reflection"
+      },
+      {
+        "memory_id": "game-2",
+        "observed_at": "2026-08-31T14:00:00Z",
+        "source": {"type": "game", "ref": "werewolf:synthetic-2"},
+        "similarity": 0.91,
+        "title": "终局重新核对整局行为",
+        "kind": "reflection"
+      }
+    ],
+    "anchor_ids": ["game-2"],
+    "membership_inferred": true,
+    "requires_review": true,
+    "writes": [],
+    "persisted": false
+  }
+}

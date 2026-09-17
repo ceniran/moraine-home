@@ -1,0 +1,35 @@
+{
+  "mode": "read_only_review",
+  "thread_id": "werewolf.action-timing",
+  "title": "狼人杀行动时机",
+  "workspace": "personal",
+  "status": "pending_review",
+  "proposed_member_ids": ["game-1", "game-2"],
+  "excluded": [
+    {"memory_id": "game-low", "reason": "below_min_score"},
+    {"memory_id": "game-foreign", "reason": "workspace_mismatch"}
+  ],
+  "points": [
+    {
+      "memory_id": "game-1",
+      "observed_at": "2026-08-23T13:00:00Z",
+      "source": {"type": "game", "ref": "werewolf:synthetic-1"},
+      "similarity": 0.86,
+      "title": "把事实、推理与猜测分开",
+      "kind": "reflection"
+    },
+    {
+      "memory_id": "game-2",
+      "observed_at": "2026-08-31T14:00:00Z",
+      "source": {"type": "game", "ref": "werewolf:synthetic-2"},
+      "similarity": 0.91,
+      "title": "终局重新核对整局行为",
+      "kind": "reflection"
+    }
+  ],
+  "anchor_ids": ["game-2"],
+  "membership_inferred": true,
+  "requires_review": true,
+  "writes": [],
+  "persisted": false
+}

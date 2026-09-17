@@ -1,0 +1,23 @@
+{
+  "memories": [
+    {
+      "id": "m1",
+      "title": "A small local retriever",
+      "kind": "project",
+      "tags": ["embedding", "local"],
+      "content": "The retriever runs on loopback and keeps its index private.",
+      "state": "active",
+      "updated_at": "2026-01-01T00:00:00Z"
+    },
+    {
+      "id": "m2",
+      "title": "A quiet evening",
+      "kind": "event",
+      "tags": ["home"],
+      "content": "We left a light on and waited for someone to return.",
+      "state": "active",
+      "updated_at": "2026-01-02T00:00:00Z"
+    }
+  ]
+}
+

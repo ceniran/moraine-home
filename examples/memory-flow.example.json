@@ -1,0 +1,17 @@
+{
+  "now": "2026-09-06T12:00:00Z",
+  "workspace": "home",
+  "observations": [
+    {"id":"obs_1","source":{"type":"conversation","ref":"session:plants"},"workspace":"home","project_id":"plants","kind":"event","created_at":"2026-09-05T09:00:00Z","content":"Started the watering feature."},
+    {"id":"obs_2","source":{"type":"conversation","ref":"session:plants"},"workspace":"home","project_id":"plants","kind":"event","created_at":"2026-09-05T09:12:00Z","content":"Finished the watering button."},
+    {"id":"obs_3","source":{"type":"conversation","ref":"session:plants"},"workspace":"home","project_id":"plants","kind":"decision","created_at":"2026-09-05T09:25:00Z","content":"Water at most once per day."},
+    {"id":"obs_4","source":{"type":"conversation","ref":"session:plants"},"workspace":"home","project_id":"plants","kind":"event","created_at":"2026-09-05T10:40:00Z","content":"Published the update."},
+    {"id":"obs_5","source":{"type":"conversation","ref":"session:plants-next"},"workspace":"home","project_id":"plants","kind":"decision","created_at":"2026-09-06T09:00:00Z","content":"Water once every twelve hours."}
+  ],
+  "reviewed_records": [
+    {"id":"rule_daily","title":"Watering interval","content":"Water at most once per day.","kind":"decision","workspace":"home","state":"active","review_status":"approved","valid_from":"2026-09-05T09:25:00Z","valid_to":"2026-09-06T09:00:00Z"},
+    {"id":"rule_12h","title":"Watering interval","content":"Water once every twelve hours.","kind":"decision","workspace":"home","state":"active","review_status":"approved","valid_from":"2026-09-06T09:00:00Z"},
+    {"id":"project_core","title":"Plant project","content":"Keep the plant care loop recoverable.","kind":"project","workspace":"home","state":"active","review_status":"approved","importance":0.9,"moraine_governance":{"core_presence":"always"}},
+    {"id":"unreviewed","title":"Guess","content":"This must not cross the gate.","kind":"reflection","workspace":"home","state":"active","review_status":"pending"}
+  ]
+}
