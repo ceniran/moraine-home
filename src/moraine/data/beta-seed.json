@@ -1,0 +1,58 @@
+{
+  "memories": [
+    {
+      "id": "memory_demo_home",
+      "title": "我们决定先做一个能长期使用的小空间",
+      "content": "这是一条完全合成的示例记忆，用来展示标题、正文、来源和时间线。它不包含任何真实用户数据。",
+      "kind": "decision",
+      "tags": ["示例", "项目"],
+      "importance": 0.72,
+      "state": "active",
+      "occurred_at": "2026-01-03T10:30:00Z",
+      "created_at": "2026-01-03T10:35:00Z",
+      "updated_at": "2026-01-03T10:35:00Z",
+      "source_candidate_ids": [],
+      "timeline": []
+    }
+  ],
+  "candidates": [
+    {
+      "id": "candidate_demo_1",
+      "title": "第一次完成本地检索",
+      "content": "合成示例：本地检索已经返回预期结果，下一步准备观察真实使用感受。",
+      "kind": "project",
+      "tags": ["示例", "检索"],
+      "occurred_at": "2026-01-05T08:00:00Z",
+      "created_at": "2026-01-05T08:05:00Z",
+      "state": "pending",
+      "basket": "本地检索"
+    },
+    {
+      "id": "candidate_demo_2",
+      "title": "决定保留可恢复归档",
+      "content": "合成示例：删除前先进入可恢复归档，避免一次操作永久丢失内容。",
+      "kind": "decision",
+      "tags": ["示例", "归档"],
+      "occurred_at": "2026-01-06T09:00:00Z",
+      "created_at": "2026-01-06T09:02:00Z",
+      "state": "pending",
+      "basket": "记忆治理"
+    }
+  ],
+  "events": [],
+  "profile": {
+    "display_name": "示例小机",
+    "summary": "这是合成身份资料，可在设置后替换。",
+    "self_core": ["我可以修订自己的身份描述。", "我的私人内容不会自动公开。"]
+  },
+  "relations": [
+    {
+      "id": "relation_demo_companion",
+      "name": "示例同行者",
+      "relation": "共同测试者",
+      "note": "这是一条合成关系节点，不对应真实人物。",
+      "updated_at": "2026-01-04T09:00:00Z"
+    }
+  ],
+  "settings": {"review_mode": "autonomous"}
+}
