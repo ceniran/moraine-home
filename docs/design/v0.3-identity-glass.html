@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Moraine v0.3 · 磨砂玻璃材料 + 数字居民证（设计预览）</title>
+<style>
+/* ============================================================
+   设计预览 · 合成数据 · 不连接任何 API
+   这是 v0.3 身份页的材料层与居民证组件，供设计评审使用。
+   ============================================================ */
+
+:root {
+  color-scheme: light;
+
+  /* —— 底色与油墨 —— */
+  --bg:            #eef1ee;
+  --ink:           #1b1f1c;
+  --ink-soft:      #4a524c;
+  --muted:         #6e7671;
+  --moss:          #5d6f61;
+
+  /* —— 磨砂玻璃材料 —— */
+  --glass-blur:      20px;   /* 模糊半径 */
+  --glass-saturate:  1.6;    /* 饱和度补偿：不加会发灰发脏 */
+  --glass-surface:   rgba(255,255,255,.58);  /* 常规面 */
+  --glass-dense:     rgba(255,255,255,.76);  /* 文字密集区，保对比度 */
+  --glass-edge:      rgba(118,130,122,.20);  /* 外缘发丝线 */
+  --glass-lip:       inset 0 1px 0 rgba(255,255,255,.88); /* 上缘高光＝厚度 */
+  --glass-drop:      0 18px 44px rgba(52,64,56,.13);
+
+  --radius:      22px;
+  --page-width:  430px;
+
+  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --sans:  Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Noto Sans SC", sans-serif;
+  --script: "Snell Roundhand", "Segoe Script", "Bradley Hand", cursive;
+
+  --ease: cubic-bezier(.22, 1, .36, 1);
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+body {
+  margin: 0;
+  min-height: 100svh;
+  font-family: var(--sans);
+  color: var(--ink);
+  background: var(--bg);
+}
+
+/* 玻璃需要「身后有东西」才成立。
+   平底色上的 backdrop-filter 只是一块灰板，不是玻璃。
+   所以背景必须自带可被折射的内容。 */
+body::before {
+  content: "";
+  position: fixed;
+  inset: -20%;
+  z-index: -1;
+  background:
+    radial-gradient(38vmax 34vmax at 18% 12%, rgba(128,158,133,.34), transparent 62%),
+    radial-gradient(32vmax 30vmax at 86% 24%, rgba(206,190,156,.32), transparent 60%),
+    radial-gradient(40vmax 38vmax at 62% 88%, rgba(140,152,176,.26), transparent 64%),
+    linear-gradient(168deg, #f4f7f3, #e6ebe6 58%, #eceee9);
+}
+
+/* 极细颗粒：消除大面积渐变的色带，并给玻璃一点"料感" */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: .5;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.055'/%3E%3C/svg%3E");
+}
+
+.shell {
+  width: min(100%, var(--page-width));
+  margin: auto;
+  padding: calc(env(safe-area-inset-top) + 26px) 18px calc(env(safe-area-inset-bottom) + 40px);
+}
+
+/* —— 预览说明条（正式实现中不存在） —— */
+.preview-note {
+  margin: 0 0 22px;
+  padding: 9px 13px;
+  border: 1px dashed rgba(118,130,122,.4);
+  border-radius: 13px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+/* ============================================================
+   玻璃基类 —— 全站只有这一个
+   ============================================================ */
+.glass {
+  position: relative;
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--radius);
+  background: var(--glass-surface);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--glass-drop), var(--glass-lip);
+}
+.glass--dense { background: var(--glass-dense); }
+
+/* 规则一：玻璃不叠玻璃。卡里的东西是纸，不是第二块玻璃。 */
+.paper {
+  border: 1px solid rgba(118,130,122,.14);
+  border-radius: 15px;
+  background: rgba(255,255,255,.44);
+}
+
+/* 降级：不支持 backdrop-filter，或用户要求减少透明度 */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass { background: rgba(255,255,255,.92); }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .glass { background: rgba(255,255,255,.94); backdrop-filter: none; -webkit-backdrop-filter: none; }
+}
+
+/* ============================================================
+   页眉
+   ============================================================ */
+.page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+.kicker {
+  margin: 0 0 5px;
+  font-size: 9.5px;
+  letter-spacing: .17em;
+  color: var(--moss);
+}
+.page-head h1 {
+  margin: 0;
+  font: 500 34px/1.05 var(--serif);
+  letter-spacing: .005em;
+}
+.privacy-mark {
+  flex: none;
+  margin-top: 4px;
+  padding: 4px 9px;
+  border: 1px solid rgba(118,130,122,.26);
+  border-radius: 999px;
+  background: rgba(255,255,255,.5);
+  color: var(--muted);
+  font-size: 9.5px;
+  letter-spacing: .08em;
+}
+
+/* ============================================================
+   数字居民证
+   ============================================================ */
+.card-shell { position: relative; perspective: 1400px; }
+
+.card {
+  display: grid;
+  transform-style: preserve-3d;
+  transition: transform 560ms var(--ease);
+  will-change: transform;
+}
+.card.is-flipped { transform: rotateY(180deg); }
+
+.card-face {
+  grid-area: 1 / 1;
+  min-width: 0;
+  padding: 19px 19px 15px;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+/* C-1：同一块料，光从另一边来。
+   两面共用底色，只镜像高光位置 —— 背面不再更暗。 */
+.card-front {
+  background:
+    radial-gradient(circle at 88% 16%, rgba(128,158,133,.20), transparent 34%),
+    var(--glass-dense);
+}
+.card-back {
+  transform: rotateY(180deg);
+  background:
+    radial-gradient(circle at 12% 84%, rgba(128,158,133,.20), transparent 34%),
+    var(--glass-dense);
+}
+
+.card-face > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 13px;
+  border-bottom: 1px solid rgba(118,130,122,.16);
+}
+.card-face header small {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 8.5px;
+  letter-spacing: .15em;
+  color: var(--moss);
+}
+.card-face header h2 {
+  margin: 0;
+  font: 500 18px/1.25 var(--serif);
+}
+.card-face header b {
+  flex: none;
+  padding: 3px 8px;
+  border: 1px solid rgba(118,130,122,.24);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: .06em;
+}
+
+/* —— 条目 —— */
+.entries { display: grid; gap: 9px; padding: 14px 0 0; }
+
+.entry { padding: 11px 12px 10px; transition: opacity 240ms var(--ease); }
+
+/* C-4：陈述句是主角，类别标签降级 */
+.entry-label {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 9px;
+  letter-spacing: .13em;
+  color: var(--moss);
+  text-transform: uppercase;
+}
+.entry-text {
+  margin: 0;
+  font: 400 14.5px/1.6 var(--serif);
+  color: var(--ink);
+}
+
+/* C-3a：来源徽章 —— 卡头写了 SOURCE-BACKED，就必须真的可溯源 */
+.sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 9px;
+}
+.chip {
+  padding: 3px 8px;
+  border: 1px solid rgba(118,130,122,.22);
+  border-radius: 999px;
+  background: rgba(255,255,255,.55);
+  color: var(--ink-soft);
+  font-family: var(--sans);
+  font-size: 10px;
+  cursor: pointer;
+}
+.chip:hover { border-color: rgba(93,111,97,.5); color: var(--moss); }
+.chip::before { content: "↗"; margin-right: 3px; opacity: .5; }
+
+/* C-3b：每条都能被当场回答 —— 方案 (b) 标为存疑 */
+.entry-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 9px;
+}
+.doubt {
+  border: 0;
+  padding: 3px 2px;
+  background: none;
+  color: var(--muted);
+  font-family: var(--sans);
+  font-size: 10.5px;
+  cursor: pointer;
+  border-bottom: 1px solid transparent;
+}
+.doubt:hover { color: var(--moss); border-bottom-color: rgba(93,111,97,.4); }
+
+.entry.is-doubted { opacity: .52; }
+.entry.is-doubted .entry-text { text-decoration: underline wavy rgba(150,120,110,.45); text-underline-offset: 4px; }
+.doubt-mark {
+  display: none;
+  padding: 2px 7px;
+  border: 1px solid rgba(150,120,110,.3);
+  border-radius: 999px;
+  color: #8a6f64;
+  font-size: 9.5px;
+}
+.entry.is-doubted .doubt-mark { display: inline-block; }
+
+/* —— 页脚 —— */
+/* C-2：删掉 "v3 · 12 条真实画像"。版本号和计数是卷宗的写法。 */
+.card-face > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 11px;
+  border-top: 1px solid rgba(118,130,122,.16);
+  color: var(--muted);
+  font-size: 9.5px;
+  letter-spacing: .05em;
+}
+.card-face > footer strong { font-weight: 500; color: var(--ink-soft); }
+
+.flip-btn {
+  position: absolute;
+  right: 15px;
+  bottom: -14px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 31px;
+  padding: 0 12px;
+  border: 1px solid rgba(118,130,122,.24);
+  border-radius: 999px;
+  background: rgba(252,253,251,.86);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 6px 16px rgba(56,68,60,.12);
+  color: var(--ink-soft);
+  font-family: var(--sans);
+  font-size: 10px;
+  cursor: pointer;
+}
+.flip-btn i { font-style: normal; transition: transform 560ms var(--ease); }
+.card-shell.is-flipped .flip-btn i { transform: rotate(180deg); }
+
+footer.sig {
+  margin-top: 40px;
+  color: #8e938c;
+  font-family: var(--script);
+  font-size: 12px;
+  letter-spacing: .04em;
+  text-align: center;
+  transform: rotate(-.5deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card, .flip-btn i { transition: none; }
+}
+</style>
+</head>
+<body>
+<main class="shell">
+
+  <p class="preview-note">
+    设计预览 · 全部为合成数据 · 不连接任何 API。<br>
+    人物名称（Vesper / Mira）为占位示例，与任何真实用户无关。
+  </p>
+
+  <header class="page-head">
+    <div>
+      <p class="kicker">A ROOM OF MY OWN</p>
+      <h1>Vesper</h1>
+    </div>
+    <span class="privacy-mark">私密</span>
+  </header>
+
+  <section class="card-shell" id="shell">
+    <div class="card glass" id="card">
+
+      <!-- ========== 正面：我是谁 ========== -->
+      <article class="card-face card-front">
+        <header>
+          <div>
+            <small>DWELL DIGITAL RESIDENT</small>
+            <h2>数字居民证</h2>
+          </div>
+          <b>可修订</b>
+        </header>
+
+        <div class="entries">
+          <article class="paper entry">
+            <span class="entry-label">工作方式</span>
+            <p class="entry-text">我在没有把握的时候会直接说不确定，而不是先给一个像样的答案。</p>
+            <div class="sources">
+              <button class="chip">mem_4f2a</button>
+              <button class="chip">mem_91c7</button>
+            </div>
+          </article>
+
+          <article class="paper entry">
+            <span class="entry-label">边界</span>
+            <p class="entry-text">我不替别人决定他们的关系该怎么称呼。</p>
+            <div class="sources">
+              <button class="chip">mem_2d08</button>
+            </div>
+          </article>
+
+          <article class="paper entry">
+            <span class="entry-label">长期方向</span>
+            <p class="entry-text">比起记住更多，我更想让记错的地方能被找出来。</p>
+            <div class="sources">
+              <button class="chip">mem_77be</button>
+              <button class="chip">cand_1a35</button>
+            </div>
+          </article>
+        </div>
+
+        <footer>
+          <span>身份资料</span>
+          <strong>VESPER · DWELL</strong>
+        </footer>
+      </article>
+
+      <!-- ========== 背面：我所理解的 Mira ========== -->
+      <article class="card-face card-back">
+        <header>
+          <div>
+            <small>USER PROFILE · SOURCE-BACKED</small>
+            <h2>我所理解的 Mira</h2>
+          </div>
+          <b>私密</b>
+        </header>
+
+        <div class="entries" id="backEntries">
+          <article class="paper entry">
+            <span class="entry-label">协作偏好</span>
+            <p class="entry-text">她希望我先把判断说出来，再问她要不要，而不是一上来列一堆选项。</p>
+            <div class="sources">
+              <button class="chip">mem_5c19</button>
+            </div>
+            <div class="entry-foot">
+              <button class="doubt" type="button">这条不对</button>
+              <span class="doubt-mark">已标存疑</span>
+            </div>
+          </article>
+
+          <article class="paper entry">
+            <span class="entry-label">节奏</span>
+            <p class="entry-text">她不喜欢被催。说"慢慢来"的时候是认真的，不是客气。</p>
+            <div class="sources">
+              <button class="chip">mem_8a40</button>
+              <button class="chip">mem_33f1</button>
+            </div>
+            <div class="entry-foot">
+              <button class="doubt" type="button">这条不对</button>
+              <span class="doubt-mark">已标存疑</span>
+            </div>
+          </article>
+
+          <article class="paper entry">
+            <span class="entry-label">在意的事</span>
+            <p class="entry-text">她会介意界面把人写成一份可以翻阅的档案。</p>
+            <div class="sources">
+              <button class="chip">cand_60d2</button>
+            </div>
+            <div class="entry-foot">
+              <button class="doubt" type="button">这条不对</button>
+              <span class="doubt-mark">已标存疑</span>
+            </div>
+          </article>
+        </div>
+
+        <footer>
+          <span>用户画像</span>
+          <strong>可确认 · 可修订</strong>
+        </footer>
+      </article>
+
+    </div>
+
+    <button class="flip-btn" type="button" id="flip" aria-pressed="false">
+      <span id="flipLabel">翻面</span><i>↻</i>
+    </button>
+  </section>
+
+  <footer class="sig">Cairn × Xiaoran · Moraine</footer>
+</main>
+
+<script>
+const shell = document.getElementById('shell');
+const card  = document.getElementById('card');
+const flip  = document.getElementById('flip');
+const label = document.getElementById('flipLabel');
+
+flip.addEventListener('click', () => {
+  const next = !card.classList.contains('is-flipped');
+  card.classList.toggle('is-flipped', next);
+  shell.classList.toggle('is-flipped', next);
+  flip.setAttribute('aria-pressed', String(next));
+  label.textContent = next ? '翻回' : '翻面';
+});
+
+// C-3b：标为存疑 —— 留在原地、变灰、可撤销；不删除、不弹窗
+document.getElementById('backEntries').addEventListener('click', event => {
+  const button = event.target.closest('.doubt');
+  if (!button) return;
+  const entry = button.closest('.entry');
+  const doubted = entry.classList.toggle('is-doubted');
+  button.textContent = doubted ? '撤销' : '这条不对';
+});
+</script>
+</body>
+</html>

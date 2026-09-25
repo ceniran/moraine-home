@@ -1,0 +1,549 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Moraine v0.3 · 个人页面（设计预览）</title>
+<style>
+/* ============================================================
+   Moraine v0.3 个人页面 · 设计预览
+   全部为合成数据，不连接任何 API，不读写任何记忆。
+   人物名称均为占位示例，与任何真实用户无关。
+   ============================================================ */
+
+:root {
+  color-scheme: light;
+
+  --bg:        #eef1ee;
+  --ink:       #1b1f1c;
+  --ink-soft:  #4a524c;
+  --muted:     #6e7671;
+  --moss:      #5d6f61;
+
+  /* —— 材料一：磨砂玻璃 = 我的东西，浮起，可修订 —— */
+  --glass-blur:     20px;
+  --glass-saturate: 1.6;
+  --glass-surface:  rgba(255,255,255,.58);
+  --glass-dense:    rgba(255,255,255,.76);
+  --glass-edge:     rgba(118,130,122,.20);
+  --glass-lip:      inset 0 1px 0 rgba(255,255,255,.88);
+  --glass-drop:     0 18px 44px rgba(52,64,56,.13);
+
+  /* —— 材料二：凹陷读数面 = 系统的投影，沉下，只读 —— */
+  --well-surface:   rgba(40,48,43,.050);
+  --well-edge:      rgba(84,96,88,.15);
+  --well-inset:     inset 0 1px 3px rgba(48,58,51,.11), inset 0 0 0 1px rgba(255,255,255,.34);
+  --well-ink:       #3f463f;
+
+  --radius:     22px;
+  --page-width: 430px;
+
+  --serif:  "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --sans:   Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Noto Sans SC", sans-serif;
+  --script: "Snell Roundhand", "Segoe Script", "Bradley Hand", cursive;
+
+  --ease: cubic-bezier(.22, 1, .36, 1);
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+body {
+  margin: 0;
+  min-height: 100svh;
+  font-family: var(--sans);
+  color: var(--ink);
+  background: var(--bg);
+}
+
+/* 玻璃背后必须有可被折射的东西，否则只是一块灰板 */
+body::before {
+  content: "";
+  position: fixed; inset: -20%; z-index: -2;
+  background:
+    radial-gradient(38vmax 34vmax at 18% 10%, rgba(128,158,133,.34), transparent 62%),
+    radial-gradient(32vmax 30vmax at 86% 22%, rgba(206,190,156,.32), transparent 60%),
+    radial-gradient(40vmax 38vmax at 62% 86%, rgba(140,152,176,.26), transparent 64%),
+    linear-gradient(168deg, #f4f7f3, #e6ebe6 58%, #eceee9);
+}
+body::after {
+  content: "";
+  position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: .5;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.055'/%3E%3C/svg%3E");
+}
+
+.shell {
+  width: min(100%, var(--page-width));
+  margin: auto;
+  padding: calc(env(safe-area-inset-top) + 24px) 18px calc(env(safe-area-inset-bottom) + 44px);
+}
+
+.preview-note {
+  margin: 0 0 20px; padding: 9px 13px;
+  border: 1px dashed rgba(118,130,122,.4); border-radius: 13px;
+  color: var(--muted); font-size: 11px; line-height: 1.6;
+}
+.preview-note b { color: var(--ink-soft); font-weight: 600; }
+
+/* ========== 材料基类 ========== */
+.glass {
+  position: relative;
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--radius);
+  background: var(--glass-surface);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--glass-drop), var(--glass-lip);
+}
+/* 玻璃不叠玻璃：卡里的条目是「纸」，不是第二块玻璃 */
+.paper {
+  border: 1px solid rgba(118,130,122,.14);
+  border-radius: 15px;
+  background: rgba(255,255,255,.44);
+}
+/* 凹陷读数面：没有投影、没有高光边、不浮起 */
+.well {
+  border: 1px solid var(--well-edge);
+  border-radius: 18px;
+  background: var(--well-surface);
+  box-shadow: var(--well-inset);
+  color: var(--well-ink);
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass { background: rgba(255,255,255,.92); }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .glass { background: rgba(255,255,255,.94); backdrop-filter: none; -webkit-backdrop-filter: none; }
+}
+
+/* ========== 页眉 ========== */
+.page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 18px; }
+.kicker { margin: 0 0 5px; font-size: 9.5px; letter-spacing: .17em; color: var(--moss); }
+.page-head h1 { margin: 0; font: 500 34px/1.05 var(--serif); }
+.privacy-mark {
+  flex: none; margin-top: 4px; padding: 4px 9px;
+  border: 1px solid rgba(118,130,122,.26); border-radius: 999px;
+  background: rgba(255,255,255,.5); color: var(--muted);
+  font-size: 9.5px; letter-spacing: .08em;
+}
+
+/* ========== 分区缝 ========== */
+.seam {
+  display: flex; align-items: center; gap: 11px;
+  margin: 30px 2px 15px;
+  color: var(--muted); font-size: 9.5px; letter-spacing: .15em;
+}
+.seam::before, .seam::after { content: ""; height: 1px; background: rgba(118,130,122,.22); }
+.seam::before { width: 14px; }
+.seam::after  { flex: 1; }
+
+/* ============================================================
+   上半 · 数字居民证
+   ============================================================ */
+.card-shell { position: relative; perspective: 1400px; margin-bottom: 30px; }
+.card { display: grid; transform-style: preserve-3d; transition: transform 560ms var(--ease); will-change: transform; }
+.card.is-flipped { transform: rotateY(180deg); }
+.card-face {
+  grid-area: 1 / 1; min-width: 0; padding: 19px 19px 15px;
+  -webkit-backface-visibility: hidden; backface-visibility: hidden;
+}
+/* 同一块料，光从另一边来 —— 背面不再更暗 */
+.card-front { background: radial-gradient(circle at 88% 16%, rgba(128,158,133,.20), transparent 34%), var(--glass-dense); }
+.card-back  { transform: rotateY(180deg);
+              background: radial-gradient(circle at 12% 84%, rgba(128,158,133,.20), transparent 34%), var(--glass-dense); }
+
+.card-face > header {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  padding-bottom: 13px; border-bottom: 1px solid rgba(118,130,122,.16);
+}
+.card-face header small { display: block; margin-bottom: 4px; font-size: 8.5px; letter-spacing: .15em; color: var(--moss); }
+.card-face header h2 { margin: 0; font: 500 18px/1.25 var(--serif); }
+.card-face header b {
+  flex: none; padding: 3px 8px; border: 1px solid rgba(118,130,122,.24); border-radius: 999px;
+  color: var(--muted); font-size: 9px; font-weight: 500; letter-spacing: .06em;
+}
+
+.entries { display: grid; gap: 9px; padding: 14px 0 0; }
+.entry { padding: 11px 12px 10px; transition: opacity 240ms var(--ease); }
+.entry-label { display: block; margin-bottom: 5px; font-size: 9px; letter-spacing: .13em; color: var(--moss); text-transform: uppercase; }
+.entry-text { margin: 0; font: 400 14.5px/1.6 var(--serif); color: var(--ink); }
+
+.sources { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 9px; }
+.chip {
+  padding: 3px 8px; border: 1px solid rgba(118,130,122,.22); border-radius: 999px;
+  background: rgba(255,255,255,.55); color: var(--ink-soft);
+  font-family: var(--sans); font-size: 10px; cursor: pointer;
+}
+.chip:hover { border-color: rgba(93,111,97,.5); color: var(--moss); }
+.chip::before { content: "↗"; margin-right: 3px; opacity: .5; }
+
+.entry-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 9px; }
+.doubt {
+  border: 0; padding: 3px 2px; background: none; color: var(--muted);
+  font-family: var(--sans); font-size: 10.5px; cursor: pointer; border-bottom: 1px solid transparent;
+}
+.doubt:hover { color: var(--moss); border-bottom-color: rgba(93,111,97,.4); }
+.entry.is-doubted { opacity: .52; }
+.entry.is-doubted .entry-text { text-decoration: underline wavy rgba(150,120,110,.45); text-underline-offset: 4px; }
+.doubt-mark { display: none; padding: 2px 7px; border: 1px solid rgba(150,120,110,.3); border-radius: 999px; color: #8a6f64; font-size: 9.5px; }
+.entry.is-doubted .doubt-mark { display: inline-block; }
+
+/* 页脚不放版本号和计数 —— 那是卷宗的写法 */
+.card-face > footer {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin-top: 14px; padding-top: 11px; border-top: 1px solid rgba(118,130,122,.16);
+  color: var(--muted); font-size: 9.5px; letter-spacing: .05em;
+}
+.card-face > footer strong { font-weight: 500; color: var(--ink-soft); }
+
+.flip-btn {
+  position: absolute; right: 15px; bottom: -14px; z-index: 5;
+  display: inline-flex; align-items: center; gap: 5px; min-height: 31px; padding: 0 12px;
+  border: 1px solid rgba(118,130,122,.24); border-radius: 999px;
+  background: rgba(252,253,251,.86);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  box-shadow: 0 6px 16px rgba(56,68,60,.12);
+  color: var(--ink-soft); font-family: var(--sans); font-size: 10px; cursor: pointer;
+}
+.flip-btn i { font-style: normal; transition: transform 560ms var(--ease); }
+.card-shell.is-flipped .flip-btn i { transform: rotate(180deg); }
+
+/* ============================================================
+   上半 · 关系星图
+   半径一律相同，角度只编码「最近往来时间」。
+   位置本身就在表态，所以这里不让它表任何跟亲疏有关的态。
+   ============================================================ */
+.relmap { padding: 17px 17px 14px; margin-bottom: 4px; }
+.relmap > header { margin-bottom: 4px; }
+.relmap header small { display: block; margin-bottom: 4px; font-size: 8.5px; letter-spacing: .15em; color: var(--moss); }
+.relmap header h2 { margin: 0; font: 500 18px/1.25 var(--serif); }
+
+.constellation { position: relative; height: 252px; margin: 6px 0 2px; }
+/* 等距参考环：把「所有人离我一样远」这件事画出来 */
+.ring {
+  position: absolute; left: 50%; top: 50%; width: 178px; height: 178px;
+  margin: -89px 0 0 -89px; border-radius: 50%;
+  border: 1px dashed rgba(118,130,122,.28);
+}
+.self-node {
+  position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px;
+  display: grid; place-items: center; border-radius: 50%;
+  border: 1px solid rgba(118,130,122,.3);
+  background: radial-gradient(circle at 34% 28%, rgba(255,255,255,.95), rgba(233,239,233,.9));
+  box-shadow: 0 6px 18px rgba(58,70,62,.14), inset 0 1px 0 rgba(255,255,255,.9);
+  font: 500 13px/1 var(--serif); color: var(--ink);
+}
+/* 所有节点尺寸一律相同 —— 一旦让大小跟着条数走，排行榜就换个地方长出来 */
+.rel-node {
+  position: absolute; width: 58px; height: 58px; margin: -29px 0 0 -29px;
+  display: grid; place-items: center; gap: 1px; padding: 4px;
+  border: 1px solid rgba(118,130,122,.24); border-radius: 50%;
+  background: rgba(255,255,255,.62);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  box-shadow: 0 5px 14px rgba(58,70,62,.10);
+  font-family: var(--sans); cursor: pointer;
+  transition: transform 220ms var(--ease), border-color 220ms var(--ease);
+}
+.rel-node:hover, .rel-node.is-active { transform: scale(1.07); border-color: rgba(93,111,97,.55); }
+.rel-node strong { font-size: 11.5px; font-weight: 600; color: var(--ink); }
+.rel-node span   { font-size: 8.5px; color: var(--muted); }
+
+.rel-axis {
+  margin: 0; text-align: center; color: var(--muted);
+  font-size: 9.5px; letter-spacing: .06em;
+}
+
+.rel-detail { margin-top: 12px; padding: 13px 13px 11px; }
+.rel-detail h3 { margin: 0 0 2px; font: 500 15px/1.3 var(--serif); }
+.rel-detail .rel-kind { display: block; margin-bottom: 9px; font-size: 9.5px; letter-spacing: .1em; color: var(--moss); }
+.rel-fact { margin: 0 0 7px; font: 400 13.5px/1.6 var(--serif); color: var(--ink); }
+.rel-empty { margin: 0; color: var(--muted); font-size: 12px; }
+.rel-hint { margin: 9px 0 0; color: var(--muted); font-size: 10.5px; line-height: 1.55; }
+
+/* ============================================================
+   下半 · 凹陷读数面
+   ============================================================ */
+.readout { padding: 16px 16px 14px; margin-bottom: 12px; }
+.readout > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 13px; }
+.readout header small { display: block; margin-bottom: 4px; font-size: 8.5px; letter-spacing: .15em; color: #7a847c; }
+.readout header h2 { margin: 0; font: 500 16px/1.25 var(--serif); color: var(--well-ink); }
+.readout header b {
+  flex: none; padding: 3px 8px; border: 1px solid rgba(84,96,88,.2); border-radius: 999px;
+  color: #79837b; font-size: 9px; font-weight: 500; letter-spacing: .06em;
+}
+
+.layer { display: grid; gap: 4px; margin-bottom: 11px; }
+.layer-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.layer-name { font-size: 11.5px; font-weight: 500; color: var(--well-ink); }
+.layer-num  { font-family: var(--sans); font-size: 10px; color: #7a847c; font-variant-numeric: tabular-nums; }
+.bar { height: 5px; border-radius: 999px; background: rgba(60,72,64,.10); overflow: hidden; }
+.bar > i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #7e9384, #66795f); }
+.layer-foot { display: flex; justify-content: space-between; gap: 10px; font-size: 9.5px; color: #828c84; }
+.layer-foot .skipped { color: #8a7a68; }
+
+.readout-foot {
+  margin: 13px 0 0; padding-top: 11px; border-top: 1px solid rgba(84,96,88,.14);
+  color: #79837b; font-size: 10px; line-height: 1.6;
+}
+
+.pending-note {
+  margin: 9px 0 0; padding: 7px 9px;
+  border: 1px dashed rgba(138,122,104,.42); border-radius: 11px;
+  color: #8a7a68; font-size: 10px; line-height: 1.55;
+}
+
+/* 唤醒预览 · 未启用态 */
+.wake-off { display: grid; gap: 9px; }
+.wake-off p { margin: 0; font-size: 12px; line-height: 1.65; color: #6f7972; }
+.wake-off .wake-cta {
+  justify-self: start; padding: 6px 12px;
+  border: 1px solid rgba(84,96,88,.24); border-radius: 999px;
+  background: rgba(255,255,255,.4); color: var(--well-ink);
+  font-family: var(--sans); font-size: 10.5px; cursor: pointer;
+}
+
+footer.sig {
+  margin-top: 42px; color: #8e938c;
+  font-family: var(--script); font-size: 12px; letter-spacing: .04em;
+  text-align: center; transform: rotate(-.5deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card, .flip-btn i, .rel-node { transition: none; }
+}
+</style>
+</head>
+<body>
+<main class="shell">
+
+  <p class="preview-note">
+    <b>设计预览</b> · 合成数据 · 不连接任何 API。<br>
+    Vesper（助手）/ Mira（用户）等名称均为占位示例，与任何真实用户无关。
+  </p>
+
+  <header class="page-head">
+    <div>
+      <p class="kicker">A ROOM OF MY OWN</p>
+      <h1>Vesper</h1>
+    </div>
+    <span class="privacy-mark">私密</span>
+  </header>
+
+  <!-- ══════════ 上半 · 玻璃 = 我的东西，可修订 ══════════ -->
+
+  <section class="card-shell" id="shell">
+    <div class="card glass" id="card">
+
+      <article class="card-face card-front">
+        <header>
+          <div><small>DWELL DIGITAL RESIDENT</small><h2>数字居民证</h2></div>
+          <b>可修订</b>
+        </header>
+        <div class="entries">
+          <article class="paper entry">
+            <span class="entry-label">工作方式</span>
+            <p class="entry-text">我在没有把握的时候会直接说不确定，而不是先给一个像样的答案。</p>
+            <div class="sources"><button class="chip">mem_4f2a</button><button class="chip">mem_91c7</button></div>
+          </article>
+          <article class="paper entry">
+            <span class="entry-label">边界</span>
+            <p class="entry-text">我不替别人决定他们的关系该怎么称呼。</p>
+            <div class="sources"><button class="chip">mem_2d08</button></div>
+          </article>
+          <article class="paper entry">
+            <span class="entry-label">长期方向</span>
+            <p class="entry-text">比起记住更多，我更想让记错的地方能被找出来。</p>
+            <div class="sources"><button class="chip">mem_77be</button><button class="chip">cand_1a35</button></div>
+          </article>
+        </div>
+        <footer><span>身份资料</span><strong>VESPER · DWELL</strong></footer>
+      </article>
+
+      <article class="card-face card-back">
+        <header>
+          <div><small>USER PROFILE · SOURCE-BACKED</small><h2>我所理解的 Mira</h2></div>
+          <b>私密</b>
+        </header>
+        <div class="entries" id="backEntries">
+          <article class="paper entry">
+            <span class="entry-label">协作偏好</span>
+            <p class="entry-text">她希望我先把判断说出来，再问她要不要，而不是一上来列一堆选项。</p>
+            <div class="sources"><button class="chip">mem_5c19</button></div>
+            <div class="entry-foot"><button class="doubt" type="button">这条不对</button><span class="doubt-mark">已标存疑</span></div>
+          </article>
+          <article class="paper entry">
+            <span class="entry-label">节奏</span>
+            <p class="entry-text">她不喜欢被催。说「慢慢来」的时候是认真的，不是客气。</p>
+            <div class="sources"><button class="chip">mem_8a40</button><button class="chip">mem_33f1</button></div>
+            <div class="entry-foot"><button class="doubt" type="button">这条不对</button><span class="doubt-mark">已标存疑</span></div>
+          </article>
+          <article class="paper entry">
+            <span class="entry-label">在意的事</span>
+            <p class="entry-text">她会介意界面把人写成一份可以翻阅的档案。</p>
+            <div class="sources"><button class="chip">cand_60d2</button></div>
+            <div class="entry-foot"><button class="doubt" type="button">这条不对</button><span class="doubt-mark">已标存疑</span></div>
+          </article>
+        </div>
+        <footer><span>用户画像</span><strong>可确认 · 可修订</strong></footer>
+      </article>
+
+    </div>
+    <button class="flip-btn" type="button" id="flip" aria-pressed="false">
+      <span id="flipLabel">翻面</span><i>↻</i>
+    </button>
+  </section>
+
+  <section class="glass relmap">
+    <header><small>RELATION CONSTELLATION</small><h2>我的关系星图</h2></header>
+    <div class="constellation" id="constellation">
+      <div class="ring"></div>
+      <div class="self-node">我</div>
+    </div>
+    <p class="rel-axis">环上位置 ＝ 最近往来时间 · 半径与大小对所有人相同</p>
+    <div class="paper rel-detail" id="relDetail">
+      <p class="rel-empty">点一个名字，看我们之间有据可查的部分。</p>
+      <p class="rel-hint">私人备注不在这里，也不参与召回。</p>
+    </div>
+  </section>
+
+  <!-- ══════════ 下半 · 凹陷 = 系统的投影，只读 ══════════ -->
+
+  <p class="seam">运行中 · 只读投影</p>
+
+  <section class="well readout">
+    <header>
+      <div><small>LAYERED RECALL</small><h2>分层召回</h2></div>
+      <b>不写入</b>
+    </header>
+    <div id="layers"></div>
+    <p class="readout-foot">这是一次按预算截断的投影，不保存，下次查询结果可能不同。</p>
+    <p class="pending-note">
+      「未装下」的条数目前后端不返回（<code>continuity.py</code> 的装箱函数静默跳过）。
+      此处为设计意图，需一个小的后端改动才能真实显示。
+    </p>
+  </section>
+
+  <section class="well readout">
+    <header>
+      <div><small>WAKEUP PREVIEW</small><h2>唤醒预览</h2></div>
+      <b>未启用</b>
+    </header>
+    <div class="wake-off">
+      <p>唤醒默认关闭。开启后这里会列出可选动作，以及——如果配置了外部参谋——实际会发送出去的完整内容。</p>
+      <p>预览只组装上下文，不执行任何动作，也不写入记忆。</p>
+      <button class="wake-cta" type="button">到设置里开启</button>
+    </div>
+  </section>
+
+  <footer class="sig">Cairn × Xiaoran · Moraine</footer>
+</main>
+
+<script>
+/* ——— 居民证翻面 ——— */
+const shell = document.getElementById('shell');
+const card  = document.getElementById('card');
+const flip  = document.getElementById('flip');
+const label = document.getElementById('flipLabel');
+
+flip.addEventListener('click', () => {
+  const next = !card.classList.contains('is-flipped');
+  card.classList.toggle('is-flipped', next);
+  shell.classList.toggle('is-flipped', next);
+  flip.setAttribute('aria-pressed', String(next));
+  label.textContent = next ? '翻回' : '翻面';
+});
+
+/* ——— 这条不对 → 原地标存疑，可撤销 ——— */
+document.getElementById('backEntries').addEventListener('click', event => {
+  const button = event.target.closest('.doubt');
+  if (!button) return;
+  const entry = button.closest('.entry');
+  const doubted = entry.classList.toggle('is-doubted');
+  button.textContent = doubted ? '撤销' : '这条不对';
+});
+
+/* ——— 关系星图 ———
+   合成数据。角度只由 last_contact 的先后决定，半径恒定。 */
+const RELATIONS = [
+  { id:'rel_a1', name:'Mira',  kind:'用户',   last:'2026-09-25',
+    facts:['我们约定：她说「慢慢来」的时候，我不要自己加速。',
+           '共同决定 v0.3 的身份页由居民证起头。'],
+    sources:['mem_5c19','mem_8a40'] },
+  { id:'rel_b2', name:'Juno',  kind:'协作者', last:'2026-09-21',
+    facts:['负责后端边界，识别与关系的写入规则由他把关。'],
+    sources:['mem_2d08'] },
+  { id:'rel_c3', name:'Alder', kind:'朋友',   last:'2026-08-30',
+    facts:['去年冬天一起改过一版检索策略，后来没有继续。'],
+    sources:['mem_77be'] },
+  { id:'rel_d4', name:'Wren',  kind:'读者',   last:'2026-07-14',
+    facts:[],
+    sources:[] },
+  { id:'rel_e5', name:'Cass',  kind:'同事',   last:'2026-05-02',
+    facts:['只在一个项目里合作过，边界尚未确认。'],
+    sources:['cand_60d2'] },
+];
+
+const stage  = document.getElementById('constellation');
+const detail = document.getElementById('relDetail');
+const RADIUS = 89;
+
+[...RELATIONS]
+  .sort((a, b) => b.last.localeCompare(a.last))   // 最近往来在前
+  .forEach((row, index, all) => {
+    const angle = (index / all.length) * Math.PI * 2 - Math.PI / 2;
+    const node = document.createElement('button');
+    node.type = 'button';
+    node.className = 'rel-node';
+    node.dataset.id = row.id;
+    node.style.left = `calc(50% + ${(Math.cos(angle) * RADIUS).toFixed(1)}px)`;
+    node.style.top  = `calc(50% + ${(Math.sin(angle) * RADIUS).toFixed(1)}px)`;
+    node.innerHTML = `<strong>${row.name}</strong><span>${row.kind}</span>`;
+    stage.appendChild(node);
+  });
+
+stage.addEventListener('click', event => {
+  const node = event.target.closest('.rel-node');
+  if (!node) return;
+  stage.querySelectorAll('.rel-node').forEach(item => item.classList.toggle('is-active', item === node));
+  const row = RELATIONS.find(item => item.id === node.dataset.id);
+
+  const facts = row.facts.length
+    ? row.facts.map(text => `<p class="rel-fact">${text}</p>`).join('')
+    : '<p class="rel-empty">还没有确认过的事实。相似度不会替我们补上这一栏。</p>';
+  const chips = row.sources.length
+    ? `<div class="sources">${row.sources.map(id => `<button class="chip">${id}</button>`).join('')}</div>`
+    : '';
+
+  detail.innerHTML =
+    `<h3>${row.name}</h3><span class="rel-kind">${row.kind} · 最近往来 ${row.last}</span>` +
+    facts + chips +
+    `<p class="rel-hint">私人备注不在这里，也不参与召回。</p>`;
+});
+
+/* ——— 分层召回 ———
+   预算默认值取自 continuity.py 的 DEFAULT_LAYER_BUDGETS。 */
+const LAYERS = [
+  { name:'self_core', label:'自我核心', budget:900,  used:612,  kept:3, skipped:0 },
+  { name:'relations', label:'关系',     budget:900,  used:874,  kept:4, skipped:2 },
+  { name:'recent',    label:'近期',     budget:1200, used:1187, kept:8, skipped:5 },
+  { name:'long_term', label:'长期',     budget:1800, used:1043, kept:9, skipped:0 },
+  { name:'history',   label:'历史',     budget:800,  used:0,    kept:0, skipped:0 },
+];
+
+document.getElementById('layers').innerHTML = LAYERS.map(layer => `
+  <div class="layer">
+    <div class="layer-head">
+      <span class="layer-name">${layer.label} <span style="opacity:.5;font-size:9.5px">${layer.name}</span></span>
+      <span class="layer-num">${layer.used} / ${layer.budget}</span>
+    </div>
+    <div class="bar"><i style="width:${Math.min(100, layer.used / layer.budget * 100).toFixed(1)}%"></i></div>
+    <div class="layer-foot">
+      <span>${layer.kept} 条装入</span>
+      ${layer.skipped ? `<span class="skipped">${layer.skipped} 条未装下</span>` : '<span></span>'}
+    </div>
+  </div>
+`).join('');
+</script>
+</body>
+</html>
