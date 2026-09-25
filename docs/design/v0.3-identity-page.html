@@ -3,12 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Moraine v0.3 · 个人页面（设计预览）</title>
+<title>Moraine v0.3 · 个人页面（设计预览 · 第二版）</title>
 <style>
 /* ============================================================
-   Moraine v0.3 个人页面 · 设计预览
+   Moraine v0.3 个人页面 · 设计预览（第二版）
    全部为合成数据，不连接任何 API，不读写任何记忆。
    人物名称均为占位示例，与任何真实用户无关。
+
+   第二版改动：居民证改为真实证件比例（1.58:1），固定不撑高。
+   卡面只放 self-core 的缩写；完整条目收进抽屉。
    ============================================================ */
 
 :root {
@@ -37,6 +40,7 @@
 
   --radius:     22px;
   --page-width: 430px;
+  --card-ratio: 1.58;       /* 证件比例 85.6 × 54 mm */
 
   --serif:  "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
   --sans:   Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Noto Sans SC", sans-serif;
@@ -56,7 +60,6 @@ body {
   background: var(--bg);
 }
 
-/* 玻璃背后必须有可被折射的东西，否则只是一块灰板 */
 body::before {
   content: "";
   position: fixed; inset: -20%; z-index: -2;
@@ -95,13 +98,11 @@ body::after {
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   box-shadow: var(--glass-drop), var(--glass-lip);
 }
-/* 玻璃不叠玻璃：卡里的条目是「纸」，不是第二块玻璃 */
 .paper {
   border: 1px solid rgba(118,130,122,.14);
   border-radius: 15px;
   background: rgba(255,255,255,.44);
 }
-/* 凹陷读数面：没有投影、没有高光边、不浮起 */
 .well {
   border: 1px solid var(--well-edge);
   border-radius: 18px;
@@ -111,14 +112,14 @@ body::after {
 }
 
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .glass { background: rgba(255,255,255,.92); }
+  .glass, .sheet { background: rgba(255,255,255,.94); }
 }
 @media (prefers-reduced-transparency: reduce) {
   .glass { background: rgba(255,255,255,.94); backdrop-filter: none; -webkit-backdrop-filter: none; }
 }
 
 /* ========== 页眉 ========== */
-.page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 18px; }
+.page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 16px; }
 .kicker { margin: 0 0 5px; font-size: 9.5px; letter-spacing: .17em; color: var(--moss); }
 .page-head h1 { margin: 0; font: 500 34px/1.05 var(--serif); }
 .privacy-mark {
@@ -131,7 +132,7 @@ body::after {
 /* ========== 分区缝 ========== */
 .seam {
   display: flex; align-items: center; gap: 11px;
-  margin: 30px 2px 15px;
+  margin: 28px 2px 14px;
   color: var(--muted); font-size: 9.5px; letter-spacing: .15em;
 }
 .seam::before, .seam::after { content: ""; height: 1px; background: rgba(118,130,122,.22); }
@@ -139,35 +140,111 @@ body::after {
 .seam::after  { flex: 1; }
 
 /* ============================================================
-   上半 · 数字居民证
+   数字居民证 —— 证件比例，固定不撑高
+   内容多了不长个儿；装不下的在抽屉里。
    ============================================================ */
-.card-shell { position: relative; perspective: 1400px; margin-bottom: 30px; }
-.card { display: grid; transform-style: preserve-3d; transition: transform 560ms var(--ease); will-change: transform; }
+.card-shell { position: relative; perspective: 1400px; margin-bottom: 26px; }
+.card {
+  display: grid;
+  aspect-ratio: var(--card-ratio) / 1;
+  transform-style: preserve-3d;
+  transition: transform 560ms var(--ease);
+  will-change: transform;
+}
 .card.is-flipped { transform: rotateY(180deg); }
+
 .card-face {
-  grid-area: 1 / 1; min-width: 0; padding: 19px 19px 15px;
+  grid-area: 1 / 1; min-width: 0;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  padding: 15px 16px 12px;
+  overflow: hidden;                       /* 关键：溢出就是溢出，不撑高 */
   -webkit-backface-visibility: hidden; backface-visibility: hidden;
 }
-/* 同一块料，光从另一边来 —— 背面不再更暗 */
-.card-front { background: radial-gradient(circle at 88% 16%, rgba(128,158,133,.20), transparent 34%), var(--glass-dense); }
+.card-front { background: radial-gradient(circle at 88% 14%, rgba(128,158,133,.20), transparent 36%), var(--glass-dense); }
 .card-back  { transform: rotateY(180deg);
-              background: radial-gradient(circle at 12% 84%, rgba(128,158,133,.20), transparent 34%), var(--glass-dense); }
+              background: radial-gradient(circle at 12% 86%, rgba(128,158,133,.20), transparent 36%), var(--glass-dense); }
 
-.card-face > header {
-  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
-  padding-bottom: 13px; border-bottom: 1px solid rgba(118,130,122,.16);
-}
-.card-face header small { display: block; margin-bottom: 4px; font-size: 8.5px; letter-spacing: .15em; color: var(--moss); }
-.card-face header h2 { margin: 0; font: 500 18px/1.25 var(--serif); }
+.card-face > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.card-face header small { display: block; margin-bottom: 3px; font-size: 8px; letter-spacing: .15em; color: var(--moss); }
+.card-face header h2 { margin: 0; font: 500 21px/1.15 var(--serif); }
 .card-face header b {
   flex: none; padding: 3px 8px; border: 1px solid rgba(118,130,122,.24); border-radius: 999px;
-  color: var(--muted); font-size: 9px; font-weight: 500; letter-spacing: .06em;
+  color: var(--muted); font-size: 8.5px; font-weight: 500; letter-spacing: .06em;
 }
 
-.entries { display: grid; gap: 9px; padding: 14px 0 0; }
+/* 卡面只放缩写 —— 两行，截断，不带来源徽章 */
+.digest { align-self: center; display: grid; gap: 7px; padding: 2px 0; }
+.digest p {
+  position: relative; margin: 0; padding-left: 11px;
+  font: 400 12.5px/1.5 var(--serif); color: var(--ink-soft);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.digest p::before {
+  content: ""; position: absolute; left: 0; top: .55em;
+  width: 4px; height: 4px; border-radius: 50%; background: rgba(120,145,124,.55);
+}
+
+.card-face > footer {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding-top: 9px; border-top: 1px solid rgba(118,130,122,.16);
+  color: var(--muted); font-size: 9px; letter-spacing: .05em;
+}
+.card-face > footer strong { font-weight: 500; color: var(--ink-soft); }
+.open-sheet {
+  border: 0; padding: 3px 0; background: none; color: var(--moss);
+  font-family: var(--sans); font-size: 10px; cursor: pointer;
+  border-bottom: 1px solid rgba(93,111,97,.35);
+}
+
+.flip-btn {
+  position: absolute; right: 14px; bottom: -13px; z-index: 5;
+  display: inline-flex; align-items: center; gap: 5px; min-height: 29px; padding: 0 11px;
+  border: 1px solid rgba(118,130,122,.24); border-radius: 999px;
+  background: rgba(252,253,251,.86);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  box-shadow: 0 6px 16px rgba(56,68,60,.12);
+  color: var(--ink-soft); font-family: var(--sans); font-size: 10px; cursor: pointer;
+}
+.flip-btn i { font-style: normal; transition: transform 560ms var(--ease); }
+.card-shell.is-flipped .flip-btn i { transform: rotate(180deg); }
+
+/* ============================================================
+   抽屉 —— 卡是索引，这里是正文
+   ============================================================ */
+.scrim {
+  position: fixed; inset: 0; z-index: 40;
+  background: rgba(30,38,33,.30);
+  -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+  opacity: 0; pointer-events: none; transition: opacity 300ms var(--ease);
+}
+.scrim.is-open { opacity: 1; pointer-events: auto; }
+
+.sheet {
+  position: fixed; left: 50%; bottom: 0; z-index: 41;
+  width: min(100%, var(--page-width)); max-height: 82svh;
+  transform: translate(-50%, 100%);
+  transition: transform 400ms var(--ease);
+  display: flex; flex-direction: column;
+  padding: 0 16px calc(env(safe-area-inset-bottom) + 18px);
+  border: 1px solid var(--glass-edge); border-bottom: 0;
+  border-radius: 24px 24px 0 0;
+  background: rgba(255,255,255,.80);
+  -webkit-backdrop-filter: blur(24px) saturate(1.6); backdrop-filter: blur(24px) saturate(1.6);
+  box-shadow: 0 -18px 50px rgba(48,60,52,.18), inset 0 1px 0 rgba(255,255,255,.9);
+}
+.sheet.is-open { transform: translate(-50%, 0); }
+.sheet-grip { flex: none; width: 34px; height: 4px; margin: 9px auto 3px; border-radius: 999px; background: rgba(118,130,122,.30); }
+.sheet > header { flex: none; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 6px 2px 12px; border-bottom: 1px solid rgba(118,130,122,.16); }
+.sheet header small { display: block; margin-bottom: 4px; font-size: 8.5px; letter-spacing: .15em; color: var(--moss); }
+.sheet header h2 { margin: 0; font: 500 17px/1.25 var(--serif); }
+.sheet-close { border: 0; padding: 4px; background: none; color: var(--muted); font-size: 16px; line-height: 1; cursor: pointer; }
+.sheet-body { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 13px 2px 2px; }
+
+.entries { display: grid; gap: 9px; }
 .entry { padding: 11px 12px 10px; transition: opacity 240ms var(--ease); }
 .entry-label { display: block; margin-bottom: 5px; font-size: 9px; letter-spacing: .13em; color: var(--moss); text-transform: uppercase; }
-.entry-text { margin: 0; font: 400 14.5px/1.6 var(--serif); color: var(--ink); }
+.entry-text { margin: 0; font: 400 14px/1.6 var(--serif); color: var(--ink); }
 
 .sources { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 9px; }
 .chip {
@@ -189,38 +266,16 @@ body::after {
 .doubt-mark { display: none; padding: 2px 7px; border: 1px solid rgba(150,120,110,.3); border-radius: 999px; color: #8a6f64; font-size: 9.5px; }
 .entry.is-doubted .doubt-mark { display: inline-block; }
 
-/* 页脚不放版本号和计数 —— 那是卷宗的写法 */
-.card-face > footer {
-  display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  margin-top: 14px; padding-top: 11px; border-top: 1px solid rgba(118,130,122,.16);
-  color: var(--muted); font-size: 9.5px; letter-spacing: .05em;
-}
-.card-face > footer strong { font-weight: 500; color: var(--ink-soft); }
-
-.flip-btn {
-  position: absolute; right: 15px; bottom: -14px; z-index: 5;
-  display: inline-flex; align-items: center; gap: 5px; min-height: 31px; padding: 0 12px;
-  border: 1px solid rgba(118,130,122,.24); border-radius: 999px;
-  background: rgba(252,253,251,.86);
-  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
-  box-shadow: 0 6px 16px rgba(56,68,60,.12);
-  color: var(--ink-soft); font-family: var(--sans); font-size: 10px; cursor: pointer;
-}
-.flip-btn i { font-style: normal; transition: transform 560ms var(--ease); }
-.card-shell.is-flipped .flip-btn i { transform: rotate(180deg); }
-
 /* ============================================================
-   上半 · 关系星图
-   半径一律相同，角度只编码「最近往来时间」。
-   位置本身就在表态，所以这里不让它表任何跟亲疏有关的态。
+   关系星图 —— 未改动
+   半径一律相同，角度只编码「最近往来时间」
    ============================================================ */
-.relmap { padding: 17px 17px 14px; margin-bottom: 4px; }
+.relmap { padding: 17px 17px 14px; }
 .relmap > header { margin-bottom: 4px; }
 .relmap header small { display: block; margin-bottom: 4px; font-size: 8.5px; letter-spacing: .15em; color: var(--moss); }
 .relmap header h2 { margin: 0; font: 500 18px/1.25 var(--serif); }
 
 .constellation { position: relative; height: 252px; margin: 6px 0 2px; }
-/* 等距参考环：把「所有人离我一样远」这件事画出来 */
 .ring {
   position: absolute; left: 50%; top: 50%; width: 178px; height: 178px;
   margin: -89px 0 0 -89px; border-radius: 50%;
@@ -234,7 +289,6 @@ body::after {
   box-shadow: 0 6px 18px rgba(58,70,62,.14), inset 0 1px 0 rgba(255,255,255,.9);
   font: 500 13px/1 var(--serif); color: var(--ink);
 }
-/* 所有节点尺寸一律相同 —— 一旦让大小跟着条数走，排行榜就换个地方长出来 */
 .rel-node {
   position: absolute; width: 58px; height: 58px; margin: -29px 0 0 -29px;
   display: grid; place-items: center; gap: 1px; padding: 4px;
@@ -249,10 +303,7 @@ body::after {
 .rel-node strong { font-size: 11.5px; font-weight: 600; color: var(--ink); }
 .rel-node span   { font-size: 8.5px; color: var(--muted); }
 
-.rel-axis {
-  margin: 0; text-align: center; color: var(--muted);
-  font-size: 9.5px; letter-spacing: .06em;
-}
+.rel-axis { margin: 0; text-align: center; color: var(--muted); font-size: 9.5px; letter-spacing: .06em; }
 
 .rel-detail { margin-top: 12px; padding: 13px 13px 11px; }
 .rel-detail h3 { margin: 0 0 2px; font: 500 15px/1.3 var(--serif); }
@@ -286,14 +337,12 @@ body::after {
   margin: 13px 0 0; padding-top: 11px; border-top: 1px solid rgba(84,96,88,.14);
   color: #79837b; font-size: 10px; line-height: 1.6;
 }
-
 .pending-note {
   margin: 9px 0 0; padding: 7px 9px;
   border: 1px dashed rgba(138,122,104,.42); border-radius: 11px;
   color: #8a7a68; font-size: 10px; line-height: 1.55;
 }
 
-/* 唤醒预览 · 未启用态 */
 .wake-off { display: grid; gap: 9px; }
 .wake-off p { margin: 0; font-size: 12px; line-height: 1.65; color: #6f7972; }
 .wake-off .wake-cta {
@@ -310,7 +359,7 @@ footer.sig {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .card, .flip-btn i, .rel-node { transition: none; }
+  .card, .flip-btn i, .rel-node, .sheet, .scrim { transition: none; }
 }
 </style>
 </head>
@@ -318,8 +367,9 @@ footer.sig {
 <main class="shell">
 
   <p class="preview-note">
-    <b>设计预览</b> · 合成数据 · 不连接任何 API。<br>
-    Vesper（助手）/ Mira（用户）等名称均为占位示例，与任何真实用户无关。
+    <b>设计预览 · 第二版</b> · 合成数据 · 不连接任何 API。<br>
+    居民证改为证件比例（1.58:1），固定不撑高；完整 self-core 收进抽屉。<br>
+    Vesper（助手）/ Mira（用户）等名称均为占位示例。
   </p>
 
   <header class="page-head">
@@ -330,34 +380,22 @@ footer.sig {
     <span class="privacy-mark">私密</span>
   </header>
 
-  <!-- ══════════ 上半 · 玻璃 = 我的东西，可修订 ══════════ -->
-
   <section class="card-shell" id="shell">
     <div class="card glass" id="card">
 
       <article class="card-face card-front">
         <header>
-          <div><small>DWELL DIGITAL RESIDENT</small><h2>数字居民证</h2></div>
+          <div><small>DWELL DIGITAL RESIDENT</small><h2>Vesper</h2></div>
           <b>可修订</b>
         </header>
-        <div class="entries">
-          <article class="paper entry">
-            <span class="entry-label">工作方式</span>
-            <p class="entry-text">我在没有把握的时候会直接说不确定，而不是先给一个像样的答案。</p>
-            <div class="sources"><button class="chip">mem_4f2a</button><button class="chip">mem_91c7</button></div>
-          </article>
-          <article class="paper entry">
-            <span class="entry-label">边界</span>
-            <p class="entry-text">我不替别人决定他们的关系该怎么称呼。</p>
-            <div class="sources"><button class="chip">mem_2d08</button></div>
-          </article>
-          <article class="paper entry">
-            <span class="entry-label">长期方向</span>
-            <p class="entry-text">比起记住更多，我更想让记错的地方能被找出来。</p>
-            <div class="sources"><button class="chip">mem_77be</button><button class="chip">cand_1a35</button></div>
-          </article>
+        <div class="digest">
+          <p>没把握的时候直接说不确定，不先给一个像样的答案。</p>
+          <p>不替别人决定他们的关系该怎么称呼。</p>
         </div>
-        <footer><span>身份资料</span><strong>VESPER · DWELL</strong></footer>
+        <footer>
+          <span>SELF-CORE · 缩写</span>
+          <button class="open-sheet" type="button" data-sheet="core">看完整条目</button>
+        </footer>
       </article>
 
       <article class="card-face card-back">
@@ -365,27 +403,14 @@ footer.sig {
           <div><small>USER PROFILE · SOURCE-BACKED</small><h2>我所理解的 Mira</h2></div>
           <b>私密</b>
         </header>
-        <div class="entries" id="backEntries">
-          <article class="paper entry">
-            <span class="entry-label">协作偏好</span>
-            <p class="entry-text">她希望我先把判断说出来，再问她要不要，而不是一上来列一堆选项。</p>
-            <div class="sources"><button class="chip">mem_5c19</button></div>
-            <div class="entry-foot"><button class="doubt" type="button">这条不对</button><span class="doubt-mark">已标存疑</span></div>
-          </article>
-          <article class="paper entry">
-            <span class="entry-label">节奏</span>
-            <p class="entry-text">她不喜欢被催。说「慢慢来」的时候是认真的，不是客气。</p>
-            <div class="sources"><button class="chip">mem_8a40</button><button class="chip">mem_33f1</button></div>
-            <div class="entry-foot"><button class="doubt" type="button">这条不对</button><span class="doubt-mark">已标存疑</span></div>
-          </article>
-          <article class="paper entry">
-            <span class="entry-label">在意的事</span>
-            <p class="entry-text">她会介意界面把人写成一份可以翻阅的档案。</p>
-            <div class="sources"><button class="chip">cand_60d2</button></div>
-            <div class="entry-foot"><button class="doubt" type="button">这条不对</button><span class="doubt-mark">已标存疑</span></div>
-          </article>
+        <div class="digest">
+          <p>先说判断，再问她要不要；不要一上来列一堆选项。</p>
+          <p>说「慢慢来」的时候是认真的，不是客气。</p>
         </div>
-        <footer><span>用户画像</span><strong>可确认 · 可修订</strong></footer>
+        <footer>
+          <span>可确认 · 可修订</span>
+          <button class="open-sheet" type="button" data-sheet="user">看完整条目</button>
+        </footer>
       </article>
 
     </div>
@@ -406,8 +431,6 @@ footer.sig {
       <p class="rel-hint">私人备注不在这里，也不参与召回。</p>
     </div>
   </section>
-
-  <!-- ══════════ 下半 · 凹陷 = 系统的投影，只读 ══════════ -->
 
   <p class="seam">运行中 · 只读投影</p>
 
@@ -439,6 +462,17 @@ footer.sig {
   <footer class="sig">Cairn × Xiaoran · Moraine</footer>
 </main>
 
+<!-- ========== 抽屉 ========== -->
+<div class="scrim" id="scrim"></div>
+<aside class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+  <div class="sheet-grip"></div>
+  <header>
+    <div><small id="sheetKicker"></small><h2 id="sheetTitle"></h2></div>
+    <button class="sheet-close" type="button" id="sheetClose" aria-label="关闭">✕</button>
+  </header>
+  <div class="sheet-body"><div class="entries" id="sheetEntries"></div></div>
+</aside>
+
 <script>
 /* ——— 居民证翻面 ——— */
 const shell = document.getElementById('shell');
@@ -454,8 +488,69 @@ flip.addEventListener('click', () => {
   label.textContent = next ? '翻回' : '翻面';
 });
 
-/* ——— 这条不对 → 原地标存疑，可撤销 ——— */
-document.getElementById('backEntries').addEventListener('click', event => {
+/* ——— 抽屉内容（合成数据） ——— */
+const SHEETS = {
+  core: {
+    kicker: 'DWELL DIGITAL RESIDENT',
+    title: '完整 self-core',
+    doubtable: false,
+    rows: [
+      { label:'工作方式', text:'我在没有把握的时候会直接说不确定，而不是先给一个像样的答案。', sources:['mem_4f2a','mem_91c7'] },
+      { label:'边界',     text:'我不替别人决定他们的关系该怎么称呼。', sources:['mem_2d08'] },
+      { label:'长期方向', text:'比起记住更多，我更想让记错的地方能被找出来。', sources:['mem_77be','cand_1a35'] },
+      { label:'协作',     text:'做大改动之前先给出可以看见的东西，再动仓库。', sources:['mem_0b63'] },
+    ],
+  },
+  user: {
+    kicker: 'USER PROFILE · SOURCE-BACKED',
+    title: '我所理解的 Mira',
+    doubtable: true,
+    rows: [
+      { label:'协作偏好', text:'她希望我先把判断说出来，再问她要不要，而不是一上来列一堆选项。', sources:['mem_5c19'] },
+      { label:'节奏',     text:'她不喜欢被催。说「慢慢来」的时候是认真的，不是客气。', sources:['mem_8a40','mem_33f1'] },
+      { label:'在意的事', text:'她会介意界面把人写成一份可以翻阅的档案。', sources:['cand_60d2'] },
+    ],
+  },
+};
+
+const scrim   = document.getElementById('scrim');
+const sheet   = document.getElementById('sheet');
+const sheetEntries = document.getElementById('sheetEntries');
+let lastFocus = null;
+
+function openSheet(key) {
+  const data = SHEETS[key];
+  if (!data) return;
+  lastFocus = document.activeElement;
+  document.getElementById('sheetKicker').textContent = data.kicker;
+  document.getElementById('sheetTitle').textContent  = data.title;
+  sheetEntries.innerHTML = data.rows.map(row => `
+    <article class="paper entry">
+      <span class="entry-label">${row.label}</span>
+      <p class="entry-text">${row.text}</p>
+      <div class="sources">${row.sources.map(id => `<button class="chip">${id}</button>`).join('')}</div>
+      ${data.doubtable ? '<div class="entry-foot"><button class="doubt" type="button">这条不对</button><span class="doubt-mark">已标存疑</span></div>' : ''}
+    </article>
+  `).join('');
+  scrim.classList.add('is-open');
+  sheet.classList.add('is-open');
+  document.getElementById('sheetClose').focus();
+}
+
+function closeSheet() {
+  scrim.classList.remove('is-open');
+  sheet.classList.remove('is-open');
+  if (lastFocus) lastFocus.focus();
+}
+
+document.querySelectorAll('.open-sheet').forEach(button =>
+  button.addEventListener('click', () => openSheet(button.dataset.sheet)));
+scrim.addEventListener('click', closeSheet);
+document.getElementById('sheetClose').addEventListener('click', closeSheet);
+document.addEventListener('keydown', event => { if (event.key === 'Escape') closeSheet(); });
+
+/* 这条不对 → 原地标存疑，可撤销 */
+sheetEntries.addEventListener('click', event => {
   const button = event.target.closest('.doubt');
   if (!button) return;
   const entry = button.closest('.entry');
@@ -463,25 +558,20 @@ document.getElementById('backEntries').addEventListener('click', event => {
   button.textContent = doubted ? '撤销' : '这条不对';
 });
 
-/* ——— 关系星图 ———
-   合成数据。角度只由 last_contact 的先后决定，半径恒定。 */
+/* ——— 关系星图（未改动） ——— */
 const RELATIONS = [
   { id:'rel_a1', name:'Mira',  kind:'用户',   last:'2026-09-25',
     facts:['我们约定：她说「慢慢来」的时候，我不要自己加速。',
            '共同决定 v0.3 的身份页由居民证起头。'],
     sources:['mem_5c19','mem_8a40'] },
   { id:'rel_b2', name:'Juno',  kind:'协作者', last:'2026-09-21',
-    facts:['负责后端边界，识别与关系的写入规则由他把关。'],
-    sources:['mem_2d08'] },
+    facts:['负责后端边界，识别与关系的写入规则由他把关。'], sources:['mem_2d08'] },
   { id:'rel_c3', name:'Alder', kind:'朋友',   last:'2026-08-30',
-    facts:['去年冬天一起改过一版检索策略，后来没有继续。'],
-    sources:['mem_77be'] },
+    facts:['去年冬天一起改过一版检索策略，后来没有继续。'], sources:['mem_77be'] },
   { id:'rel_d4', name:'Wren',  kind:'读者',   last:'2026-07-14',
-    facts:[],
-    sources:[] },
+    facts:[], sources:[] },
   { id:'rel_e5', name:'Cass',  kind:'同事',   last:'2026-05-02',
-    facts:['只在一个项目里合作过，边界尚未确认。'],
-    sources:['cand_60d2'] },
+    facts:['只在一个项目里合作过，边界尚未确认。'], sources:['cand_60d2'] },
 ];
 
 const stage  = document.getElementById('constellation');
@@ -489,7 +579,7 @@ const detail = document.getElementById('relDetail');
 const RADIUS = 89;
 
 [...RELATIONS]
-  .sort((a, b) => b.last.localeCompare(a.last))   // 最近往来在前
+  .sort((a, b) => b.last.localeCompare(a.last))
   .forEach((row, index, all) => {
     const angle = (index / all.length) * Math.PI * 2 - Math.PI / 2;
     const node = document.createElement('button');
@@ -507,22 +597,17 @@ stage.addEventListener('click', event => {
   if (!node) return;
   stage.querySelectorAll('.rel-node').forEach(item => item.classList.toggle('is-active', item === node));
   const row = RELATIONS.find(item => item.id === node.dataset.id);
-
   const facts = row.facts.length
     ? row.facts.map(text => `<p class="rel-fact">${text}</p>`).join('')
     : '<p class="rel-empty">还没有确认过的事实。相似度不会替我们补上这一栏。</p>';
   const chips = row.sources.length
-    ? `<div class="sources">${row.sources.map(id => `<button class="chip">${id}</button>`).join('')}</div>`
-    : '';
-
+    ? `<div class="sources">${row.sources.map(id => `<button class="chip">${id}</button>`).join('')}</div>` : '';
   detail.innerHTML =
     `<h3>${row.name}</h3><span class="rel-kind">${row.kind} · 最近往来 ${row.last}</span>` +
-    facts + chips +
-    `<p class="rel-hint">私人备注不在这里，也不参与召回。</p>`;
+    facts + chips + `<p class="rel-hint">私人备注不在这里，也不参与召回。</p>`;
 });
 
-/* ——— 分层召回 ———
-   预算默认值取自 continuity.py 的 DEFAULT_LAYER_BUDGETS。 */
+/* ——— 分层召回 ——— */
 const LAYERS = [
   { name:'self_core', label:'自我核心', budget:900,  used:612,  kept:3, skipped:0 },
   { name:'relations', label:'关系',     budget:900,  used:874,  kept:4, skipped:2 },
