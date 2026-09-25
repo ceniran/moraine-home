@@ -8,6 +8,8 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from .adviser import AdviserSecretStore
+from .aml_adapter import AMLAdapter
 from .beta_store import BetaStore
 
 
@@ -28,7 +30,17 @@ def create_beta_server(env: dict[str, str] | None = None):
     semantic_url = env.get("MORAINE_SEMANTIC_URL", "").rstrip("/")
     semantic_token = env.get("MORAINE_SEMANTIC_TOKEN", "")
     store = BetaStore(data_file, seed_file)
-
+    adviser = AdviserSecretStore(env.get("MORAINE_ADVISER_SECRET_FILE", data_file.parent / ".adviser-secret.json"))
+    aml_embedder = None
+    if env.get("MORAINE_AML_SEMANTIC", "").lower() in {"1", "true", "yes"}:
+        from .server import FastEmbedder
+        aml_embedder = FastEmbedder(
+            env.get("MORAINE_AML_MODEL", env.get("MORAINE_MODEL", "BAAI/bge-small-zh-v1.5")),
+            env.get("MORAINE_AML_MODEL_CACHE", env.get("MORAINE_MODEL_CACHE", "./models")),
+            int(env.get("MORAINE_AML_THREADS", env.get("MORAINE_THREADS", "2"))),
+        )
+    aml = AMLAdapter(env.get("MORAINE_AML_DATA_DIR", data_file.parent / "aml-evaluation"), aml_embedder,
+                     int(env.get("MORAINE_AML_BATCH_SIZE", "4")))
     def search(query: str, limit: int) -> dict:
         if semantic_url:
             endpoint = f"{semantic_url}/search?{urllib.parse.urlencode({'query': query, 'limit': limit})}"
@@ -94,7 +106,8 @@ def create_beta_server(env: dict[str, str] | None = None):
             query = urllib.parse.parse_qs(parsed.query)
             try:
                 if parsed.path == "/api/health":
-                    return self._json(200, {"ok": True, "service": "moraine-beta", "schema": BetaStore.SCHEMA})
+                    return self._json(200, {"ok": True, "service": "moraine-beta", "schema": BetaStore.SCHEMA,
+                                            "auth_required": bool(token)})
                 if parsed.path.startswith("/api/") and not self._authorized():
                     return self._json(401, {"error": "unauthorized"})
                 if parsed.path == "/api/overview":
@@ -105,6 +118,10 @@ def create_beta_server(env: dict[str, str] | None = None):
                     return self._json(200, {"items": store.list_candidates()})
                 if parsed.path == "/api/events":
                     return self._json(200, {"items": store.list_events(int(query.get("limit", [200])[0]))})
+                if parsed.path == "/api/rollbacks":
+                    return self._json(200, {"items": store.list_rollbacks(), "ttl_hours": 48})
+                if parsed.path == "/api/snapshots":
+                    return self._json(200, {"items": store.list_snapshots()})
                 if parsed.path == "/api/calendar":
                     return self._json(200, {"items": store.calendar()})
                 if parsed.path == "/api/profile":
@@ -113,6 +130,8 @@ def create_beta_server(env: dict[str, str] | None = None):
                     return self._json(200, {"items": store.list_relations()})
                 if parsed.path == "/api/settings":
                     return self._json(200, store.settings())
+                if parsed.path == "/api/adviser":
+                    return self._json(200, adviser.public())
                 if parsed.path == "/api/search":
                     return self._json(200, search(query.get("query", [""])[0], int(query.get("limit", [20])[0])))
                 if parsed.path == "/api/export":
@@ -129,6 +148,10 @@ def create_beta_server(env: dict[str, str] | None = None):
                 if not self._authorized():
                     return self._json(401, {"error": "unauthorized"})
                 body = self._body()
+                if parsed.path == "/aml/add":
+                    return self._json(200, aml.add(body))
+                if parsed.path == "/aml/search":
+                    return self._json(200, aml.search(body))
                 if parsed.path == "/api/candidates":
                     return self._json(201, store.add_candidate(body))
                 if parsed.path == "/api/candidates/admit":
@@ -136,10 +159,24 @@ def create_beta_server(env: dict[str, str] | None = None):
                     return self._json(201, row)
                 if parsed.path == "/api/candidates/consolidate-preview":
                     return self._json(200, store.consolidation_preview(body.get("candidate_ids") or [], body.get("relations")))
+                if parsed.path == "/api/candidates/shred":
+                    return self._json(200, store.shred_eligible_candidates())
+                if parsed.path == "/api/snapshots":
+                    return self._json(201, store.create_snapshot(str(body.get("label") or "manual")))
+                if parsed.path.startswith("/api/snapshots/"):
+                    parts = parsed.path.split("/")
+                    if len(parts) == 4:
+                        return self._json(200, store.restore_snapshot(parts[3]))
+                if parsed.path.startswith("/api/rollbacks/"):
+                    parts = parsed.path.split("/")
+                    if len(parts) == 4:
+                        return self._json(200, store.rollback_candidate_admission(parts[3]))
                 if parsed.path.startswith("/api/candidates/"):
                     parts = parsed.path.split("/")
                     if len(parts) == 5 and parts[4] in {"ignore", "restore"}:
                         return self._json(200, store.decide_candidate(parts[3], parts[4]))
+                    if len(parts) == 5 and parts[4] == "route":
+                        return self._json(200, store.route_candidate(parts[3], str(body.get("destination") or ""), body))
                 if parsed.path.startswith("/api/memories/"):
                     parts = parsed.path.split("/")
                     if len(parts) == 5 and parts[4] in {"archive", "restore"}:
@@ -158,6 +195,8 @@ def create_beta_server(env: dict[str, str] | None = None):
                     return self._json(200, store.upsert_relation(body))
                 if parsed.path == "/api/settings":
                     return self._json(200, store.update_settings(body))
+                if parsed.path == "/api/adviser":
+                    return self._json(200, adviser.update(body))
                 return self._json(404, {"error": "not_found"})
             except OverflowError:
                 return self._json(413, {"error": "request_too_large"})

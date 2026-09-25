@@ -4,16 +4,20 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "moraine-index"
-version = "0.1.0"
+version = "0.2.0b1"
 description = "A small local semantic index for private text collections"
 requires-python = ">=3.10"
 license = "PolyForm-Noncommercial-1.0.0"
 license-files = ["LICENSE", "NOTICE.md"]
 dependencies = ["fastembed==0.7.4", "numpy>=1.26,<3"]
 
+[project.optional-dependencies]
+mcp = ["mcp>=1.0,<2"]
+
 [project.scripts]
 moraine = "moraine.server:main"
 moraine-beta = "moraine.beta_server:main"
+moraine-mcp = "moraine.mcp_server:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

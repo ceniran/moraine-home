@@ -2,6 +2,8 @@
 
 > The sanitized standalone beta is available in-tree. See the [standalone beta guide](docs/beta-standalone.md); it uses synthetic examples and relative data paths, never our private production instance.
 
+Current prerelease: `v0.2.0-beta.1`. Chinese first-time testers can follow the [ten-minute first-run guide](docs/first-run.zh-CN.md).
+
 <p align="center">
   <img src="assets/moraine-stone.png" width="220" alt="Moraine stone mark with layered mineral veins">
 </p>
@@ -26,6 +28,9 @@ The practical benefits are:
 - **Revisable importance:** memories can be weighted, lowered, protected, archived, and restored.
 - **Data ownership:** source text, indexes, and backups can remain on a personal computer or VPS.
 
+Moraine's core retrieval uses local keyword and local-vector paths only. It does not send queries or candidate summaries to an external adviser model.
+
+The Settings view can store an optional Jev adviser credential for the Agent runtime, for example to request a second opinion during autonomous wakeups. The credential lives in a separate `0600` file and never enters core retrieval, memories, portable exports, or MCP results.
 ## What the complete private deployment does
 
 Our real deployment has been used with hundreds of private memories and currently includes:
@@ -54,7 +59,8 @@ The standalone beta now provides the general-purpose parts of this flow. Private
 - contracts for episode candidates, bi-temporal validity, and bounded core projections;
 - reversible decision ledgers, review stores, and cross-memory experience-thread candidates;
 - a systemd example, synthetic fixtures, and tests that do not read private data.
-- a standalone local store and mobile PWA covering event baskets, five relation-aware consolidation modes, revision, replacement, weighting, calendar, audit, archive/restore, self-core, a generic relationship graph, and portable import/export.
+- a standalone local store and mobile PWA covering event baskets, five relation-aware consolidation modes, revision, replacement, weighting, calendar, audit, archive/restore, self-core, a generic relationship graph, and portable import/export;
+- an optional local MCP adapter that gives the owning Agent the same memory-management surface as the human workbench, including governance, profile, relations, and portable import/export.
 
 ## A good fit for
 
@@ -83,8 +89,8 @@ The standalone beta now provides the general-purpose parts of this flow. Private
 Python 3.10 or newer is required.
 
 ```bash
-git clone https://github.com/ceniran/moraine-home.git
-cd moraine-home
+git clone https://github.com/ceniran/moraine.git
+cd moraine
 python3 -m venv .venv
 .venv/bin/pip install -e .
 cp .env.example .env

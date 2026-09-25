@@ -11,6 +11,7 @@ services:
       MORAINE_BETA_WEB_ROOT: /app/src/moraine/static
       MORAINE_SEMANTIC_URL: http://semantic:4781
       MORAINE_SEMANTIC_TOKEN: ${MORAINE_API_TOKEN:?set MORAINE_API_TOKEN in .env}
+      MORAINE_ADVISER_SECRET_FILE: /data/.adviser-secret.json
     volumes:
       - moraine-data:/data
     ports:

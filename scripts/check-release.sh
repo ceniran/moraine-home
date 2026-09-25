@@ -12,7 +12,12 @@ if grep -RniE --binary-files=without-match --exclude='*.pyc' --exclude-dir='__py
 fi
 
 PYTHONPATH=src python3 -m unittest tests.test_beta_store tests.test_beta_server
-python3 -m compileall -q src/moraine/beta_store.py src/moraine/beta_server.py
+if PYTHONPATH=src python3 -c 'import mcp' 2>/dev/null; then
+  PYTHONPATH=src python3 -m unittest tests.test_mcp_server
+else
+  echo "release check: MCP protocol test skipped (install with pip install -e '.[mcp]')"
+fi
+python3 -m compileall -q src/moraine/beta_store.py src/moraine/beta_server.py src/moraine/mcp_server.py
 node --check src/moraine/static/app.js
 node --check src/moraine/static/service-worker.js
 git diff --check

@@ -2,6 +2,8 @@
 
 > 纯净内测工作台已经可以独立运行：参见 [独立版启动说明](docs/beta-standalone.zh-CN.md)。第一次让小机入住时，可把 [给小机的 Moraine 使用说明](docs/agent-guide.zh-CN.md) 交给它阅读。纯净版只使用合成示例和相对数据目录，不读取我们的私人生产实例。
 
+第一次安装请直接照着[十分钟首次使用](docs/first-run.zh-CN.md)操作。当前内测版本为 `v0.2.0-beta.1`。
+
 <p align="center">
   <img src="assets/moraine-stone.png" width="220" alt="带有层状石脉的 Moraine 小石头标记">
 </p>
@@ -28,10 +30,13 @@ Moraine 是一个给个人 AI、小机和长期陪伴型 Agent 使用的记忆�
 - **重要程度可以调整**：记忆支持赋权、降权、保护、归档与恢复；
 - **数据归自己**：正文、索引和备份都可以放在自己的电脑或 VPS 上。
 
+Moraine 核心召回只使用本地关键词与本地向量路径，不向外部顾问模型发送查询或候选摘要。
+
+设置页可为 Agent 运行层保存可选的 Jev 小参谋凭证，例如供自动唤醒获取第二意见。凭证独立保存在0600文件中，不参与核心召回，也不进入记忆、导出文件或MCP返回。
+
 ## 完整记忆库在做什么
 
 我们自己的真实部署已经在数百条私人记忆上运行，当前包含：
-
 - **事件篮子与筛选入库**：同一段对话产生的碎片先按事件聚合，再决定是否进入长期记忆；
 - **候选箱**：查看待判断、受保护与暂存内容，不让系统擅自裁决身份、关系和重大承诺；
 - **本地向量召回**：在 CPU 上用语义相似度寻找相关旧记忆，并可与关键词结果融合；
@@ -57,6 +62,7 @@ Moraine 是一个给个人 AI、小机和长期陪伴型 Agent 使用的记忆�
 - 可逆决策账本、审阅存储与跨记忆经验线候选；
 - systemd 示例、合成数据和不读取私人内容的测试。
 - 独立本地存储与手机 PWA，覆盖事件篮子、五类关系整合、修订、替换、赋权、日历、审计、归档恢复、self-core、通用关系网和可迁移导入导出。
+- 可选的本地 MCP 适配器，让记忆库所属的 Agent 获得与人类工作台等价的记忆治理、个人资料、关系网及迁移能力。
 
 ## 它适合谁
 
@@ -85,8 +91,8 @@ Moraine 是一个给个人 AI、小机和长期陪伴型 Agent 使用的记忆�
 需要 Python 3.10 或更高版本。首次运行会下载本地模型；模型缓存完成后可以离线检索。
 
 ```bash
-git clone https://github.com/ceniran/moraine-home.git
-cd moraine-home
+git clone https://github.com/ceniran/moraine.git
+cd moraine
 python3 -m venv .venv
 .venv/bin/pip install -e .
 cp .env.example .env
@@ -107,6 +113,8 @@ curl -H "Authorization: Bearer $MORAINE_API_TOKEN" \
 
 完整数据格式、接口、安全边界与 systemd 示例见 [`docs/integration.md`](docs/integration.md)。记忆强度规则见 [`docs/governance.md`](docs/governance.md)，候选层与时间模型见 [`docs/memory-layers.md`](docs/memory-layers.md)。
 
+若要让 Codex 等支持 MCP 的本地 Agent 使用纯净工作台，请先启动 `moraine-beta`，再安装 `pip install -e '.[mcp]'` 并运行 `moraine-mcp`。完整配置与工具边界见[纯净内测版说明](docs/beta-standalone.zh-CN.md#让-agent-通过-mcp-使用)。
+
 ## 数据与隐私
 
 - 本仓库只包含合成示例，不包含 Cairn 与 Xiaoran 的私人记忆、关系数据、凭证、生产路径或真实索引；
@@ -120,7 +128,6 @@ curl -H "Authorization: Bearer $MORAINE_API_TOKEN" \
 Moraine 以 **PolyForm Noncommercial License 1.0.0** 非商业开放：允许个人学习、研究、实验和非商业自用；商业产品、收费服务、付费托管、售卖或其他预期商业用途需要另行取得书面授权。
 
 复制、修改或再次分发时，必须保留完整许可证、项目地址、版权声明和共同署名：
-
 `Cairn × Xiaoran · Moraine`
 
 第三方组件与模型继续遵循各自许可证。本项目是“源代码可用／非商业开放”，不是 OSI 定义下的开源软件。完整条款见 [`LICENSE`](LICENSE)。

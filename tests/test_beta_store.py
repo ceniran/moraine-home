@@ -32,6 +32,32 @@ class BetaStoreTest(unittest.TestCase):
         self.assertEqual(store.overview()["candidates"], 0)
         self.assertEqual(store.overview()["active"], 1)
 
+    def test_candidate_admission_can_be_fully_rolled_back(self):
+        store = make_store(self.root)
+        first = store.add_candidate({"title": "第一段", "content": "起点"})
+        related = store.add_candidate({"title": "旁支", "content": "只关联"})
+        before = store.snapshot()["candidates"]
+        memory = store.admit(
+            [first["id"], related["id"]],
+            relations={first["id"]: "supplement", related["id"]: "related_only"},
+        )
+        receipt = memory["rollback"]
+        self.assertEqual(store.list_rollbacks()[0]["id"], receipt["id"])
+        result = store.rollback_candidate_admission(receipt["id"])
+        self.assertEqual(result["removed_memory_id"], memory["id"])
+        self.assertEqual(store.snapshot()["candidates"], before)
+        self.assertEqual(store.overview()["active"], 0)
+        self.assertEqual(store.list_rollbacks(), [])
+        self.assertIn("candidate_admission_rolled_back", [event["type"] for event in store.list_events()])
+
+    def test_candidate_admission_rollback_refuses_newer_changes(self):
+        store = make_store(self.root)
+        candidate = store.add_candidate({"title": "将被整合", "content": "正文"})
+        memory = store.admit([candidate["id"]])
+        store.set_importance(memory["id"], 0.9)
+        with self.assertRaisesRegex(ValueError, "newer memory change"):
+            store.rollback_candidate_admission(memory["rollback"]["id"])
+
     def test_archive_restore_and_portable_round_trip(self):
         store = make_store(self.root)
         candidate = store.add_candidate({"title": "可恢复", "content": "正文"})
@@ -97,6 +123,54 @@ class BetaStoreTest(unittest.TestCase):
         self.assertEqual(second.profile()["display_name"], "测试小机")
         self.assertEqual(second.list_relations()[0]["name"], "测试同行者")
         self.assertEqual(second.settings()["review_mode"], "joint")
+
+    def test_legacy_jev_setting_is_ignored_on_import(self):
+        store = make_store(self.root)
+        exported = store.snapshot()
+        exported["settings"]["jev_enabled"] = True
+        exported["settings"]["jev_endpoint"] = "https://example.invalid"
+        second = make_store(self.root / "legacy-settings")
+        second.replace_all(exported)
+        self.assertEqual(second.settings()["review_mode"], "autonomous")
+        self.assertFalse(second.settings()["candidate_retention_enabled"])
+        self.assertNotIn("jev_enabled", second.snapshot()["settings"])
+
+    def test_snapshot_create_list_and_restore(self):
+        store = make_store(self.root)
+        store.add_candidate({"title": "快照前", "content": "应被恢复"})
+        snapshot = store.create_snapshot("手动安全点")
+        store.add_candidate({"title": "快照后", "content": "恢复后应消失"})
+        self.assertEqual(store.list_snapshots()[0]["id"], snapshot["id"])
+        store.restore_snapshot(snapshot["id"])
+        self.assertEqual([row["title"] for row in store.list_candidates()], ["快照前"])
+
+    def test_identity_relation_routing_is_opt_in(self):
+        store = make_store(self.root)
+        identity = store.add_candidate({"title": "身份", "content": "我允许自己改变。", "kind": "identity"})
+        with self.assertRaisesRegex(ValueError, "disabled"):
+            store.route_candidate(identity["id"], "self_core")
+        store.update_settings({"identity_relation_routing": True})
+        store.route_candidate(identity["id"], "self_core")
+        self.assertIn("我允许自己改变。", store.profile()["self_core"])
+        relation = store.add_candidate({"title": "同行者", "content": "共同做项目", "kind": "relationship"})
+        store.route_candidate(relation["id"], "relation", {"name": "同行者", "relation": "协作者"})
+        self.assertEqual(store.list_relations()[0]["relation"], "协作者")
+
+    def test_candidate_retention_shreds_only_eligible_content(self):
+        store = make_store(self.root)
+        pending = store.add_candidate({"title": "仍待审", "content": "不能粉碎"})
+        concluded = store.add_candidate({"title": "已忽略", "content": "到期后粉碎"})
+        store.decide_candidate(concluded["id"], "ignore")
+        with store.lock:
+            data = store._read()
+            next(row for row in data["candidates"] if row["id"] == concluded["id"])["decided_at"] = "2020-01-01T00:00:00Z"
+            store._save(data)
+        store.update_settings({"candidate_retention_enabled": True, "candidate_retention_hours": 24})
+        result = store.shred_eligible_candidates()
+        self.assertEqual(result["candidate_ids"], [concluded["id"]])
+        rows = {row["id"]: row for row in store.list_candidates()}
+        self.assertEqual(rows[pending["id"]]["content"], "不能粉碎")
+        self.assertNotIn("content", rows[concluded["id"]])
 
     def test_relation_aware_merge_revision_and_replacement(self):
         store = make_store(self.root)

@@ -70,3 +70,19 @@ Do not let a local embedding model become the only path to retrieval. A smaller
 model can be unavailable, can rank a name poorly, and can require a complete
 rebuild after a model change. Literal matching and a tested rollback path are
 part of the design, not optional polish.
+
+## Agent access through MCP
+
+The optional `moraine-mcp` command is a thin STDIO adapter over the standalone
+beta API. Install it with `pip install -e '.[mcp]'`, keep `moraine-beta`
+running, and pass `MORAINE_MCP_URL` plus the existing `MORAINE_BETA_TOKEN` to
+the MCP process. The adapter does not create a second store.
+
+Its server instructions tell agents that search results are clues rather than
+facts, and that new material normally enters the candidate queue. The owning
+Agent receives the same memory-management surface as the human workbench:
+candidate governance, consolidation, revision, replacement, importance,
+archive/restore, profile, relations, settings, audit views, and portable
+import/export. Autonomous versus joint review is a property of the instance,
+not a second approval gate imposed by MCP. Whole-store import is accurately
+marked as replacing data and the backend creates a recovery snapshot first.
