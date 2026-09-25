@@ -91,8 +91,8 @@ Moraine 核心召回只使用本地关键词与本地向量路径，不向外部
 需要 Python 3.10 或更高版本。首次运行会下载本地模型；模型缓存完成后可以离线检索。
 
 ```bash
-git clone https://github.com/ceniran/moraine.git
-cd moraine
+git clone https://github.com/ceniran/moraine-home.git
+cd moraine-home
 python3 -m venv .venv
 .venv/bin/pip install -e .
 cp .env.example .env

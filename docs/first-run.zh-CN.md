@@ -5,8 +5,8 @@
 ## 1. 下载并创建本地配置
 
 ```bash
-git clone https://github.com/ceniran/moraine.git
-cd moraine
+git clone https://github.com/ceniran/moraine-home.git
+cd moraine-home
 cp .env.example .env
 ```
 

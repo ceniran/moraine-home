@@ -89,8 +89,8 @@ The standalone beta now provides the general-purpose parts of this flow. Private
 Python 3.10 or newer is required.
 
 ```bash
-git clone https://github.com/ceniran/moraine.git
-cd moraine
+git clone https://github.com/ceniran/moraine-home.git
+cd moraine-home
 python3 -m venv .venv
 .venv/bin/pip install -e .
 cp .env.example .env
