@@ -74,6 +74,13 @@ class McpToolsTest(unittest.IsolatedAsyncioTestCase):
                 candidate = payload(added)
                 tiering = await session.call_tool("candidate_tiering_suggestions", {})
                 self.assertEqual(payload(tiering)["items"][0]["suggested_tier"], "uncertain")
+                durable_added = await session.call_tool("candidate_add", {
+                    "title": "合成决定", "content": "采用可回退方案", "kind": "decision",
+                })
+                durable_candidate = payload(durable_added)
+                tiering = await session.call_tool("candidate_tiering_suggestions", {})
+                durable_tier = next(row for row in payload(tiering)["items"] if row["candidate_id"] == durable_candidate["id"])
+                self.assertEqual(durable_tier["suggested_tier"], "long_term")
                 preview = await session.call_tool("consolidation_preview", {"candidate_ids": [candidate["id"]]})
                 self.assertFalse(payload(preview)["persisted"])
 

@@ -11,7 +11,7 @@ from pathlib import Path
 
 from .consolidate import consolidate
 from .continuity import DEFAULT_LAYER_BUDGETS, build_layered_context, build_wakeup_preview
-from .memory_tiering import suggest_memory_tier
+from .memory_tiering import derive_tiering_evidence, suggest_memory_tier
 
 
 def utc_now() -> str:
@@ -388,9 +388,12 @@ class BetaStore:
         return sorted(rows, key=lambda row: row.get("created_at", ""))
 
     def tiering_suggestions(self) -> list[dict]:
+        snapshot = self.snapshot()
         return [
-            {"candidate_id": row["id"], **suggest_memory_tier(row)}
-            for row in self.list_candidates()
+            {"candidate_id": row["id"], **suggest_memory_tier(
+                row, evidence=derive_tiering_evidence(row, snapshot)
+            )}
+            for row in snapshot["candidates"]
             if row.get("state", "pending") == "pending"
         ]
 
@@ -439,11 +442,6 @@ class BetaStore:
             "state": "pending",
             "basket": str(value.get("basket") or "unassigned")[:120],
         }
-        for field in ("confirmation_count", "recall_count", "action_reference_count"):
-            if field in value:
-                row[field] = max(0, int(value[field]))
-        if "observed_span_days" in value:
-            row["observed_span_days"] = max(0.0, float(value["observed_span_days"]))
         if value.get("expires_at"):
             row["expires_at"] = str(value["expires_at"])
         with self.lock:

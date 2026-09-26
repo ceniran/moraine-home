@@ -52,6 +52,19 @@ class ContinuityTests(unittest.TestCase):
         self.assertLessEqual(result["used_chars"], 300)
         core = next(layer for layer in result["layers"] if layer["name"] == "self_core")
         self.assertEqual(core["items"], [])
+        self.assertEqual(core["skipped_count"], 1)
+        self.assertEqual(core["skipped_ids"], ["core-1"])
+
+    def test_history_keeps_reserved_budget_when_enabled(self):
+        self.snapshot["self_core_records"] = [{"id": "core-big", "text": "身" * 700, "state": "active"}]
+        self.snapshot["user_profile_records"] = [{"id": "user-big", "text": "像" * 800, "state": "active"}]
+        self.snapshot["relations"] = [{"id": "relation-big", "name": "人", "facts": ["关" * 700], "state": "active"}]
+        self.snapshot["memories"].append({"id": "active-big", "title": "近", "content": "期" * 1000,
+                                           "state": "active", "occurred_at": "2026-09-26"})
+        result = build_layered_context(self.snapshot, include_history=True)
+        history = next(layer for layer in result["layers"] if layer["name"] == "history")
+        self.assertGreater(history["budget"], 0)
+        self.assertEqual([row["id"] for row in history["items"]], ["m2"])
 
     def test_wakeup_is_disabled_by_default(self):
         self.snapshot["continuity_settings"]["wakeup_enabled"] = False

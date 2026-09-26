@@ -187,5 +187,16 @@ class BetaServerTest(unittest.TestCase):
         recent = next(layer for layer in layered["layers"] if layer["name"] == "recent")
         self.assertIn(memory["id"], [row["id"] for row in recent["items"]])
 
+    def test_normal_project_candidate_reaches_long_term_without_hidden_counters(self):
+        candidate = self.request("/api/candidates", "POST", {
+            "title": "公开项目", "content": "完成一个可复核版本", "kind": "project",
+        })[1]
+        preview = self.request("/api/candidates/tiering")[1]
+        suggestion = next(row for row in preview["items"] if row["candidate_id"] == candidate["id"])
+        self.assertEqual(suggestion["suggested_tier"], "long_term")
+        self.assertTrue(suggestion["actionable"])
+        self.assertEqual(suggestion["signals"]["evidence_source"], "store_projection")
+        self.assertNotIn("confirmation_count", suggestion["signals"])
+
 if __name__ == "__main__":
     unittest.main()

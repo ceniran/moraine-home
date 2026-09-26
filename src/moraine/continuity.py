@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 
 
 DEFAULT_LAYER_BUDGETS = {"self_core": 800, "user_profile": 900, "relations": 800, "recent": 1100, "long_term": 1600, "history": 800}
+LEGACY_ITEM_ESTIMATE = 300
+MAX_LEGACY_RECENT_ITEMS = 12
 
 
 def _terms(value: str) -> set[str]:
@@ -35,7 +37,7 @@ def _expired(row: Mapping) -> bool:
 
 
 def _fit(rows: Iterable[Mapping], budget: int, *, layer: str, text_keys: tuple[str, ...]) -> dict:
-    items, used = [], 0
+    items, used, skipped_ids = [], 0, []
     for raw in rows:
         row = dict(raw)
         text = "\n".join(str(row.get(key) or "").strip() for key in text_keys if str(row.get(key) or "").strip())
@@ -46,10 +48,12 @@ def _fit(rows: Iterable[Mapping], budget: int, *, layer: str, text_keys: tuple[s
                 "reason": str(row.get("recall_reason") or layer)[:120]}
         addition = len(json.dumps(item, ensure_ascii=False)) + (1 if items else 0)
         if used + addition > budget:
+            skipped_ids.append(row.get("id"))
             continue
         items.append(item)
         used += addition
-    return {"name": layer, "budget": budget, "used": used, "items": items}
+    return {"name": layer, "budget": budget, "used": used, "items": items,
+            "skipped_count": len(skipped_ids), "skipped_ids": skipped_ids}
 
 
 def build_layered_context(snapshot: Mapping, *, query: str = "", include_history: bool = False,
@@ -72,9 +76,11 @@ def build_layered_context(snapshot: Mapping, *, query: str = "", include_history
     explicit_recent = [row for row in active if row.get("memory_tier") == "recent"]
     explicit_long_term = [row for row in active if row.get("memory_tier") == "long_term"]
     legacy = [row for row in active if row.get("memory_tier") not in {"recent", "long_term"}]
-    recent = explicit_recent + legacy[:8]
-    long_term = explicit_long_term + legacy[8:]
-    layers, remaining = [], total_budget
+    legacy_recent_limit = max(1, min(MAX_LEGACY_RECENT_ITEMS, int(limits["recent"]) // LEGACY_ITEM_ESTIMATE))
+    recent = explicit_recent + legacy[:legacy_recent_limit]
+    long_term = explicit_long_term + legacy[legacy_recent_limit:]
+    history_reserve = min(int(limits["history"]), total_budget) if include_history else 0
+    layers, remaining = [], total_budget - history_reserve
     for name, rows, text_keys in (
         ("self_core", core, ("text",)), ("user_profile", user_profile, ("subject", "category", "text")),
         ("relations", relations, ("name", "relation", "facts")),
@@ -84,7 +90,8 @@ def build_layered_context(snapshot: Mapping, *, query: str = "", include_history
         layers.append(layer)
         remaining -= layer["used"]
     if include_history:
-        layer = _fit(historical, min(int(limits["history"]), remaining), layer="history", text_keys=("title", "content"))
+        layer = _fit(historical, min(int(limits["history"]), history_reserve + remaining),
+                     layer="history", text_keys=("title", "content"))
         layers.append(layer)
     return {"query": query, "layers": layers, "used_chars": sum(layer["used"] for layer in layers),
             "total_budget": total_budget, "persisted": False, "recall_is_evidence_not_fact": True}

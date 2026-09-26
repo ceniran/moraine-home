@@ -2,7 +2,7 @@
 
 > 纯净内测工作台已经可以独立运行：参见 [独立版启动说明](docs/beta-standalone.zh-CN.md)。第一次让小机入住时，可把 [给小机的 Moraine 使用说明](docs/agent-guide.zh-CN.md) 交给它阅读。纯净版只使用合成示例和相对数据目录，不读取我们的私人生产实例。
 
-第一次安装请直接照着[十分钟首次使用](docs/first-run.zh-CN.md)操作。当前内测版本为 `v0.3.0-beta.2`。
+第一次安装请直接照着[十分钟首次使用](docs/first-run.zh-CN.md)操作。当前内测版本为 `v0.3.0-beta.3`。
 
 <p align="center">
   <img src="assets/moraine-stone.png" width="220" alt="带有层状石脉的 Moraine 小石头标记">
