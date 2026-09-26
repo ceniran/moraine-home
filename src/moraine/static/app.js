@@ -2,7 +2,7 @@ const guideStyle = document.createElement("link");
 guideStyle.rel = "stylesheet";
 guideStyle.href = "./connection-guide.css";
 document.head.appendChild(guideStyle);
-const state = { overview: null, memories: [], candidates: [], archived: [], events: [], calendar: [], rollbacks: [], snapshots: [], profile: {}, selfCore: [], userProfile: [], relations: [], layeredRecall: null, settings: {}, adviser: {} };
+const state = { overview: null, memories: [], candidates: [], tiering: [], archived: [], events: [], calendar: [], rollbacks: [], snapshots: [], profile: {}, selfCore: [], userProfile: [], relations: [], layeredRecall: null, settings: {}, adviser: {} };
 const API_ROOT = window.location.pathname.startsWith("/moraine-beta/") ? "/moraine-beta" : "";
 const $ = selector => document.querySelector(selector);
 const esc = value => String(value ?? "").replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
@@ -75,12 +75,12 @@ function item(row, action = "") {
 }
 
 async function load() {
-  const [overview, memories, candidates, archived, events, calendar, rollbacks, snapshots, profile, selfCore, userProfile, relations, layeredRecall, settings, adviser] = await Promise.all([
-    api("/api/overview"), api("/api/memories?state=active"), api("/api/candidates"),
+  const [overview, memories, candidates, tiering, archived, events, calendar, rollbacks, snapshots, profile, selfCore, userProfile, relations, layeredRecall, settings, adviser] = await Promise.all([
+    api("/api/overview"), api("/api/memories?state=active"), api("/api/candidates"), api("/api/candidates/tiering"),
     api("/api/memories?state=historical"), api("/api/events?limit=120"), api("/api/calendar"),
     api("/api/rollbacks"), api("/api/snapshots"), api("/api/profile"), api("/api/self-core"), api("/api/user-profile"), api("/api/relations"), api("/api/recall/layered?summary=1"), api("/api/settings"), api("/api/adviser"),
   ]);
-  Object.assign(state, { overview, memories: memories.items, candidates: candidates.items, archived: archived.items, events: events.items, calendar: calendar.items, rollbacks: rollbacks.items, snapshots: snapshots.items, profile, selfCore: selfCore.items || [], userProfile: userProfile.items || [], relations: relations.items, layeredRecall, settings, adviser });
+  Object.assign(state, { overview, memories: memories.items, candidates: candidates.items, tiering: tiering.items || [], archived: archived.items, events: events.items, calendar: calendar.items, rollbacks: rollbacks.items, snapshots: snapshots.items, profile, selfCore: selfCore.items || [], userProfile: userProfile.items || [], relations: relations.items, layeredRecall, settings, adviser });
   render();
 }
 
@@ -91,7 +91,8 @@ function render() {
   renderMemories(state.memories);
   const pending = state.candidates.filter(row => row.state === "pending");
   const baskets = Object.groupBy ? Object.groupBy(pending, row => row.basket || "未分篮") : pending.reduce((groups, row) => { (groups[row.basket || "未分篮"] ||= []).push(row); return groups; }, {});
-  $("#candidate-list").innerHTML = Object.entries(baskets).map(([basket, rows]) => `<section class="basket-group"><h3 class="basket-title">${esc(basket)}</h3>${rows.map(row => `<label class="item"><input type="checkbox" value="${esc(row.id)}"><span><button type="button" class="row-action" data-ignore="${esc(row.id)}">忽略</button><h3>${esc(row.title)}</h3><span class="item-meta">${date(row.occurred_at)} · ${esc(row.kind || "event")}</span><p>${esc(row.content)}</p><select class="relation-select" data-relation="${esc(row.id)}"><option value="supplement">补充：汇入同一事件</option><option value="duplicate">重复：压缩硬重复</option><option value="evolution">更迭：发展线与当前状态</option><option value="conflict">冲突：并存为未决冲突</option><option value="related_only">仅相关：只建立关联</option></select>${state.settings.identity_relation_routing && row.kind === "identity" ? `<button type="button" class="secondary route-action" data-route-core="${esc(row.id)}">归入 self-core</button>` : ""}${state.settings.identity_relation_routing && ["preference", "boundary"].includes(row.kind) ? `<button type="button" class="secondary route-action" data-route-user="${esc(row.id)}">归入用户画像</button>` : ""}${state.settings.identity_relation_routing && row.kind === "relationship" ? `<button type="button" class="secondary route-action" data-route-relation="${esc(row.id)}">归入关系网</button>` : ""}</span></label>`).join("")}</section>`).join("") || '<p class="muted">候选箱是空的。</p>';
+  const tierLabels = { recent: "建议近期", long_term: "建议长期", uncertain: "暂不确定" };
+  $("#candidate-list").innerHTML = Object.entries(baskets).map(([basket, rows]) => `<section class="basket-group"><h3 class="basket-title">${esc(basket)}</h3>${rows.map(row => { const tier = state.tiering.find(item => item.candidate_id === row.id); return `<label class="item"><input type="checkbox" value="${esc(row.id)}"><span><button type="button" class="row-action" data-ignore="${esc(row.id)}">忽略</button><h3>${esc(row.title)}</h3><span class="item-meta">${date(row.occurred_at)} · ${esc(row.kind || "event")}${tier ? ` · ${esc(tierLabels[tier.suggested_tier] || tier.suggested_tier)}` : ""}</span><p>${esc(row.content)}</p>${tier ? `<p class="muted">依据：${tier.reasons.map(esc).join("、")}；仅供确认，尚未写入</p>` : ""}<select class="relation-select" data-relation="${esc(row.id)}"><option value="supplement">补充：汇入同一事件</option><option value="duplicate">重复：压缩硬重复</option><option value="evolution">更迭：发展线与当前状态</option><option value="conflict">冲突：并存为未决冲突</option><option value="related_only">仅相关：只建立关联</option></select>${state.settings.identity_relation_routing && row.kind === "identity" ? `<button type="button" class="secondary route-action" data-route-core="${esc(row.id)}">归入 self-core</button>` : ""}${state.settings.identity_relation_routing && ["preference", "boundary"].includes(row.kind) ? `<button type="button" class="secondary route-action" data-route-user="${esc(row.id)}">归入用户画像</button>` : ""}${state.settings.identity_relation_routing && row.kind === "relationship" ? `<button type="button" class="secondary route-action" data-route-relation="${esc(row.id)}">归入关系网</button>` : ""}</span></label>`; }).join("")}</section>`).join("") || '<p class="muted">候选箱是空的。</p>';
   $("#rollback-list").innerHTML = state.rollbacks.length ? state.rollbacks.map(row => `<article class="item"><button type="button" class="row-action" data-rollback="${esc(row.id)}">撤回</button><h3>${esc(state.memories.find(memory => memory.id === row.memory_id)?.title || "最近一次整合")}</h3><div class="item-meta"><span>${row.candidate_ids.length} 条来源候选</span><span>截止 ${dateTime(row.available_until)}</span></div></article>`).join("") : '<p class="muted">目前没有可撤回的整合。</p>';
   $("#archive-list").innerHTML = state.archived.length ? state.archived.map(row => item(row, row.state === "archived" ? `<button class="row-action" data-restore="${esc(row.id)}">恢复</button>` : '<span class="row-action">已由新记忆替换</span>')).join("") : '<p class="muted">归档里还没有内容。</p>';
   $("#activity-list").innerHTML = state.events.length ? state.events.map(event => `<article class="item"><h3>${eventName(event.type)}</h3><div class="item-meta"><span>${date(event.at)}</span><span>${esc(event.target || "")}</span></div></article>`).join("") : '<p class="muted">还没有操作记录。</p>';
@@ -205,8 +206,14 @@ document.addEventListener("click", async event => {
 $("#admit").addEventListener("click", async () => {
   const { ids, relations } = candidateSelection();
   if (!ids.length) return notice("请先选择候选");
-  try { await api("/api/candidates/admit", { method: "POST", body: JSON.stringify({ candidate_ids: ids, relations }) }); await load(); notice("已整理入库；48小时内可完整撤回"); } catch (error) { notice(error.message); }
+  const memoryTier = $("#memory-tier").value;
+  const expiry = $("#memory-expiry").value;
+  if (memoryTier === "recent" && !expiry) return notice("近期记忆需要设置失效时间");
+  const payload = { candidate_ids: ids, relations, memory_tier: memoryTier || undefined, expires_at: memoryTier === "recent" ? new Date(expiry).toISOString() : undefined };
+  try { await api("/api/candidates/admit", { method: "POST", body: JSON.stringify(payload) }); await load(); notice("已整理入库；48小时内可完整撤回"); } catch (error) { notice(error.message); }
 });
+
+$("#memory-tier").addEventListener("change", event => { $("#expiry-label").hidden = event.target.value !== "recent"; });
 
 $("#candidate-form").addEventListener("submit", async event => {
   event.preventDefault();

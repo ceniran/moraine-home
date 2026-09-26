@@ -95,6 +95,11 @@ def create_mcp(client: MoraineClient) -> FastMCP:
         return client.request("/api/candidates")
 
     @server.tool(annotations=read_only)
+    def candidate_tiering_suggestions() -> dict:
+        """Preview deterministic recent/long-term/uncertain suggestions for pending candidates. This does not move or save any memory."""
+        return client.request("/api/candidates/tiering")
+
+    @server.tool(annotations=read_only)
     def event_list(limit: int = 100) -> dict:
         """Read the audit trail for memory operations. This is operational history, not a list of life events."""
         limit = max(1, min(int(limit), 1000))
@@ -163,6 +168,8 @@ def create_mcp(client: MoraineClient) -> FastMCP:
         relations: dict[str, str] | None = None,
         title: str | None = None,
         content: str | None = None,
+        memory_tier: str | None = None,
+        expires_at: str | None = None,
     ) -> dict:
         """Create one long-term memory from reviewed candidates. Call preview first and apply only the IDs and relations you actually reviewed."""
         payload: dict[str, Any] = {"candidate_ids": candidate_ids, "relations": relations or {}}
@@ -170,6 +177,10 @@ def create_mcp(client: MoraineClient) -> FastMCP:
             payload["title"] = title
         if content is not None:
             payload["content"] = content
+        if memory_tier is not None:
+            payload["memory_tier"] = memory_tier
+        if expires_at is not None:
+            payload["expires_at"] = expires_at
         return client.request("/api/candidates/admit", "POST", payload)
 
     @server.tool(annotations=read_only)

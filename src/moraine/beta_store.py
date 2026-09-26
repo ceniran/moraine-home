@@ -11,6 +11,7 @@ from pathlib import Path
 
 from .consolidate import consolidate
 from .continuity import DEFAULT_LAYER_BUDGETS, build_layered_context, build_wakeup_preview
+from .memory_tiering import suggest_memory_tier
 
 
 def utc_now() -> str:
@@ -386,6 +387,13 @@ class BetaStore:
         rows = self.snapshot()["candidates"]
         return sorted(rows, key=lambda row: row.get("created_at", ""))
 
+    def tiering_suggestions(self) -> list[dict]:
+        return [
+            {"candidate_id": row["id"], **suggest_memory_tier(row)}
+            for row in self.list_candidates()
+            if row.get("state", "pending") == "pending"
+        ]
+
     def list_events(self, limit: int = 200) -> list[dict]:
         rows = self.snapshot()["events"]
         return sorted(rows, key=lambda row: row.get("at", ""), reverse=True)[: max(1, min(int(limit), 1000))]
@@ -431,6 +439,13 @@ class BetaStore:
             "state": "pending",
             "basket": str(value.get("basket") or "unassigned")[:120],
         }
+        for field in ("confirmation_count", "recall_count", "action_reference_count"):
+            if field in value:
+                row[field] = max(0, int(value[field]))
+        if "observed_span_days" in value:
+            row["observed_span_days"] = max(0.0, float(value["observed_span_days"]))
+        if value.get("expires_at"):
+            row["expires_at"] = str(value["expires_at"])
         with self.lock:
             data = self._read()
             if any(item.get("id") == row["id"] for item in data["candidates"]):
@@ -480,16 +495,38 @@ class BetaStore:
             "persisted": False,
         }
 
-    def admit(self, candidate_ids: list[str], title: str | None = None, content: str | None = None, relations: dict | None = None) -> dict:
+    def admit(self, candidate_ids: list[str], title: str | None = None, content: str | None = None,
+              relations: dict | None = None, memory_tier: str | None = None,
+              expires_at: str | None = None) -> dict:
         ids = {str(value) for value in candidate_ids}
         if not ids:
             raise ValueError("candidate_ids is required")
+        if memory_tier not in {None, "recent", "long_term"}:
+            raise ValueError("memory_tier must be recent or long_term")
+        if memory_tier == "recent" and not expires_at:
+            raise ValueError("expires_at is required for recent memory")
+        if memory_tier == "long_term" and expires_at:
+            raise ValueError("long_term memory must not have expires_at")
+        if expires_at:
+            try:
+                parsed_expiry = datetime.fromisoformat(str(expires_at).replace("Z", "+00:00"))
+                if parsed_expiry.tzinfo is None:
+                    parsed_expiry = parsed_expiry.replace(tzinfo=timezone.utc)
+                if parsed_expiry <= datetime.now(timezone.utc):
+                    raise ValueError("expires_at must be in the future")
+            except ValueError as error:
+                if str(error) == "expires_at must be in the future":
+                    raise
+                raise ValueError("expires_at must be an ISO timestamp") from error
         now = utc_now()
         with self.lock:
             data = self._read()
             selected = [row for row in data["candidates"] if row.get("id") in ids and row.get("state", "pending") == "pending"]
             if len(selected) != len(ids):
                 raise ValueError("one or more candidates are missing or already decided")
+            if memory_tier and any(str(row.get("kind") or "").casefold() in {"identity", "relationship", "boundary"}
+                                   for row in selected):
+                raise ValueError("identity, relationship, and boundary candidates require specialized routing")
             ordered = sorted(selected, key=lambda row: row.get("occurred_at") or row.get("created_at") or "")
             candidate_snapshots = deepcopy(ordered)
             draft = self.consolidation_preview([row["id"] for row in ordered], relations)
@@ -513,6 +550,12 @@ class BetaStore:
                 "consolidation": {"method": draft["method"], "removed": draft["removed"], "sentences": draft["sentences"], "relations": draft["relations"]},
                 "versions": [],
             }
+            if memory_tier:
+                memory["memory_tier"] = memory_tier
+                memory["tier_confirmed_at"] = now
+                memory["tier_source"] = "human_or_agent_review"
+            if expires_at:
+                memory["expires_at"] = str(expires_at)
             data["memories"].append(memory)
             for row in data["candidates"]:
                 if row.get("id") in ids:

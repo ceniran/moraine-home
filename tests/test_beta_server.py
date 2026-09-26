@@ -169,5 +169,23 @@ class BetaServerTest(unittest.TestCase):
         archived_profile = self.request(f"/api/user-profile/{user_profile['id']}/archive", "POST", {"reason": "合成归档"})[1]
         self.assertEqual(archived_profile["state"], "archived")
 
+    def test_tiering_preview_and_confirmed_recent_memory(self):
+        candidate = self.request("/api/candidates", "POST", {
+            "title": "短期状态", "content": "这周临时调整", "kind": "status",
+            "expires_at": "2099-01-01T00:00:00Z",
+        })[1]
+        preview = self.request("/api/candidates/tiering")[1]
+        suggestion = next(row for row in preview["items"] if row["candidate_id"] == candidate["id"])
+        self.assertEqual(suggestion["suggested_tier"], "recent")
+        self.assertFalse(preview["persisted"])
+        memory = self.request("/api/candidates/admit", "POST", {
+            "candidate_ids": [candidate["id"]], "memory_tier": "recent",
+            "expires_at": "2099-01-01T00:00:00Z",
+        })[1]
+        self.assertEqual(memory["memory_tier"], "recent")
+        layered = self.request("/api/recall/layered", "POST", {"query": "短期"})[1]
+        recent = next(layer for layer in layered["layers"] if layer["name"] == "recent")
+        self.assertIn(memory["id"], [row["id"] for row in recent["items"]])
+
 if __name__ == "__main__":
     unittest.main()

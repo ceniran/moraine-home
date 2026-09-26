@@ -59,6 +59,21 @@ class ContinuityTests(unittest.TestCase):
         self.assertFalse(result["enabled"])
         self.assertEqual(result["reason"], "wakeup_disabled")
 
+    def test_explicit_tiers_override_legacy_recency_and_expired_recent_is_excluded(self):
+        self.snapshot["memories"] = [
+            {"id": "recent-1", "title": "近期", "content": "临时状态", "state": "active",
+             "memory_tier": "recent", "expires_at": "2099-01-01T00:00:00Z", "occurred_at": "2020-01-01"},
+            {"id": "long-1", "title": "长期", "content": "稳定事实", "state": "active",
+             "memory_tier": "long_term", "occurred_at": "2098-01-01"},
+            {"id": "expired", "title": "过期", "content": "不再召回", "state": "active",
+             "memory_tier": "recent", "expires_at": "2020-01-01T00:00:00Z"},
+        ]
+        result = build_layered_context(self.snapshot)
+        layers = {layer["name"]: layer for layer in result["layers"]}
+        self.assertEqual([row["id"] for row in layers["recent"]["items"]], ["recent-1"])
+        self.assertEqual([row["id"] for row in layers["long_term"]["items"]], ["long-1"])
+        self.assertNotIn("expired", str(result))
+
 
 if __name__ == "__main__":
     unittest.main()

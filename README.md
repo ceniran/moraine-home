@@ -2,7 +2,7 @@
 
 > The sanitized standalone beta is available in-tree. See the [standalone beta guide](docs/beta-standalone.md); it uses synthetic examples and relative data paths, never our private production instance.
 
-Current prerelease: `v0.3.0-beta.1`. Chinese first-time testers can follow the [ten-minute first-run guide](docs/first-run.zh-CN.md).
+Current prerelease: `v0.3.0-beta.2`. Chinese first-time testers can follow the [ten-minute first-run guide](docs/first-run.zh-CN.md).
 
 <p align="center">
   <img src="assets/moraine-stone.png" width="220" alt="Moraine stone mark with layered mineral veins">

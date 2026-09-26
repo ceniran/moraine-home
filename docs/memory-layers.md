@@ -78,3 +78,14 @@ projection is generated from the same approved set. The preview always returns a
 
 `examples/memory-flow.example.json` provides a synthetic watering-rule scenario covering
 short-session grouping, a later publication event, and a next-day rule change.
+# Lightweight tier suggestions
+
+Moraine can preview a deterministic tier suggestion for every pending candidate:
+
+- `recent`: an explicit future expiry exists, or the candidate is marked as a temporary status, emotion, or plan;
+- `long_term`: explicit metadata shows repeated confirmation, observation across time, later recall, or an effect on action;
+- `uncertain`: there is not enough stability evidence to recommend either layer.
+
+The preview never changes storage. A reviewed admission may explicitly confirm `recent` or `long_term`; recent memories require an expiry timestamp and stop participating in ordinary layered recall after expiry. Identity, relationship, and boundary candidates are excluded from ordinary tier confirmation and must use their specialized review path.
+
+The calculation does not read prose to infer truth or relationship meaning. It uses only declared counters, time span, kind, and expiry metadata. A local language model may explain these signals in a later optional layer, but it does not receive write authority.

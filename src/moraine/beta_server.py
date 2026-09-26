@@ -114,6 +114,8 @@ def create_beta_server(env: dict[str, str] | None = None):
                     return self._json(200, store.overview())
                 if parsed.path == "/api/memories":
                     return self._json(200, {"items": store.list_memories(query.get("state", ["all"])[0])})
+                if parsed.path == "/api/candidates/tiering":
+                    return self._json(200, {"items": store.tiering_suggestions(), "persisted": False})
                 if parsed.path == "/api/candidates":
                     return self._json(200, {"items": store.list_candidates()})
                 if parsed.path == "/api/events":
@@ -171,7 +173,8 @@ def create_beta_server(env: dict[str, str] | None = None):
                 if parsed.path == "/api/candidates":
                     return self._json(201, store.add_candidate(body))
                 if parsed.path == "/api/candidates/admit":
-                    row = store.admit(body.get("candidate_ids") or [], body.get("title"), body.get("content"), body.get("relations"))
+                    row = store.admit(body.get("candidate_ids") or [], body.get("title"), body.get("content"),
+                                      body.get("relations"), body.get("memory_tier"), body.get("expires_at"))
                     return self._json(201, row)
                 if parsed.path == "/api/candidates/consolidate-preview":
                     return self._json(200, store.consolidation_preview(body.get("candidate_ids") or [], body.get("relations")))

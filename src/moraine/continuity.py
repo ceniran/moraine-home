@@ -3,6 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 import json
 from typing import Iterable, Mapping
+from datetime import datetime, timezone
 
 
 DEFAULT_LAYER_BUDGETS = {"self_core": 800, "user_profile": 900, "relations": 800, "recent": 1100, "long_term": 1600, "history": 800}
@@ -18,6 +19,19 @@ def _matches(query: str, row: Mapping) -> bool:
         return True
     haystack = " ".join(str(row.get(key) or "") for key in ("name", "relation", "title", "content", "text", "facts")).casefold()
     return any(term in haystack for term in terms)
+
+
+def _expired(row: Mapping) -> bool:
+    value = row.get("expires_at")
+    if not value:
+        return False
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed <= datetime.now(timezone.utc)
+    except ValueError:
+        return True
 
 
 def _fit(rows: Iterable[Mapping], budget: int, *, layer: str, text_keys: tuple[str, ...]) -> dict:
@@ -50,13 +64,16 @@ def build_layered_context(snapshot: Mapping, *, query: str = "", include_history
     core = [row for row in snapshot.get("self_core_records", []) if row.get("state", "active") == "active"]
     user_profile = [row for row in snapshot.get("user_profile_records", []) if row.get("state", "active") == "active"]
     relations = [row for row in snapshot.get("relations", []) if row.get("state", "active") == "active" and _matches(query, row)]
-    active = [row for row in snapshot.get("memories", []) if row.get("state", "active") == "active" and _matches(query, row)]
+    active = [row for row in snapshot.get("memories", []) if row.get("state", "active") == "active"
+              and not _expired(row) and _matches(query, row)]
     active.sort(key=lambda row: str(row.get("occurred_at") or row.get("updated_at") or ""), reverse=True)
     historical = [row for row in snapshot.get("memories", []) if row.get("state") in {"archived", "superseded"} and _matches(query, row)]
     historical.sort(key=lambda row: str(row.get("updated_at") or row.get("occurred_at") or ""), reverse=True)
-    recent = active[:8]
-    recent_ids = {row.get("id") for row in recent}
-    long_term = [row for row in active if row.get("id") not in recent_ids]
+    explicit_recent = [row for row in active if row.get("memory_tier") == "recent"]
+    explicit_long_term = [row for row in active if row.get("memory_tier") == "long_term"]
+    legacy = [row for row in active if row.get("memory_tier") not in {"recent", "long_term"}]
+    recent = explicit_recent + legacy[:8]
+    long_term = explicit_long_term + legacy[8:]
     layers, remaining = [], total_budget
     for name, rows, text_keys in (
         ("self_core", core, ("text",)), ("user_profile", user_profile, ("subject", "category", "text")),
