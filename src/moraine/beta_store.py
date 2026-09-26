@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from .consolidate import consolidate
+from .continuity import DEFAULT_LAYER_BUDGETS, build_layered_context, build_wakeup_preview
 
 
 def utc_now() -> str:
@@ -48,7 +49,16 @@ class BetaStore:
             "events": [],
             "rollbacks": [],
             "profile": {"display_name": "", "summary": "", "self_core": []},
+            "self_core_records": [],
+            "user_profile_records": [],
             "relations": [],
+            "continuity_settings": {
+                "wakeup_enabled": False,
+                "adviser_enabled": False,
+                "max_choices": 3,
+                "total_budget": 5000,
+                "layer_budgets": {},
+            },
             "settings": {"review_mode": "autonomous", "candidate_retention_enabled": False,
                          "candidate_retention_hours": 168, "identity_relation_routing": False},
         }
@@ -77,9 +87,16 @@ class BetaStore:
                 raise ValueError(f"{key} must be a list")
         payload.setdefault("rollbacks", [])
         payload.setdefault("profile", {"display_name": "", "summary": "", "self_core": []})
+        payload.setdefault("self_core_records", [])
+        payload.setdefault("user_profile_records", [])
         payload.setdefault("relations", [])
+        payload.setdefault("continuity_settings", {"wakeup_enabled": False, "adviser_enabled": False,
+                                                    "max_choices": 3, "total_budget": 5000, "layer_budgets": {}})
+        payload["continuity_settings"].setdefault("total_budget", 5000)
         payload.setdefault("settings", {"review_mode": "autonomous"})
         if (not isinstance(payload["profile"], dict) or not isinstance(payload["relations"], list)
+                or not isinstance(payload["self_core_records"], list) or not isinstance(payload["user_profile_records"], list)
+                or not isinstance(payload["continuity_settings"], dict)
                 or not isinstance(payload["settings"], dict) or not isinstance(payload["rollbacks"], list)):
             raise ValueError("profile and settings must be objects; relations must be a list")
         legacy_settings = payload["settings"]
@@ -150,16 +167,130 @@ class BetaStore:
             return deepcopy(data["settings"])
 
     def update_profile(self, value: dict) -> dict:
+        if "self_core" in value:
+            raise ValueError("profile.self_core is read-only legacy data; use /api/self-core with reason and source_ids")
         display_name = str(value.get("display_name", "")).strip()[:120]
         summary = str(value.get("summary", "")).strip()[:2000]
-        self_core = [str(item).strip()[:500] for item in list(value.get("self_core") or []) if str(item).strip()][:20]
         now = utc_now()
         with self.lock:
             data = self._read()
-            data["profile"] = {"display_name": display_name, "summary": summary, "self_core": self_core, "updated_at": now}
+            legacy_self_core = list(data["profile"].get("self_core") or [])
+            data["profile"] = {"display_name": display_name, "summary": summary,
+                               "self_core": legacy_self_core, "updated_at": now}
             data["events"].append({"id": uuid.uuid4().hex, "type": "profile_updated", "at": now, "target": "profile"})
             self._save(data)
             return deepcopy(data["profile"])
+
+    def list_self_core(self, state: str = "active") -> list[dict]:
+        rows = deepcopy(self.snapshot()["self_core_records"])
+        if state != "all":
+            rows = [row for row in rows if row.get("state", "active") == state]
+        return sorted(rows, key=lambda row: (int(row.get("position", 0)), str(row.get("created_at", ""))))
+
+    def upsert_self_core(self, value: dict) -> dict:
+        text = str(value.get("text") or "").strip()
+        reason = str(value.get("reason") or "").strip()
+        source_ids = [str(item)[:160] for item in list(value.get("source_ids") or [])[:20] if str(item).strip()]
+        if not text or not reason or not source_ids:
+            raise ValueError("text, reason, and at least one source_id are required")
+        if len(text) > 800:
+            raise ValueError("self-core text must contain at most 800 characters")
+        record_id = str(value.get("id") or f"core_{uuid.uuid4().hex[:12]}")
+        now = utc_now()
+        with self.lock:
+            data = self._read()
+            existing = next((row for row in data["self_core_records"] if row.get("id") == record_id), None)
+            if existing is None:
+                row = {"id": record_id, "text": text, "source_ids": source_ids, "reason": reason[:500],
+                       "state": "active", "position": int(value.get("position", len(data["self_core_records"]))),
+                       "created_at": now, "updated_at": now, "versions": []}
+                data["self_core_records"].append(row)
+                event_type = "self_core_added"
+            else:
+                versions = list(existing.get("versions") or [])
+                versions.append({key: deepcopy(existing.get(key)) for key in ("text", "source_ids", "reason", "updated_at")})
+                existing.update({"text": text, "source_ids": source_ids, "reason": reason[:500], "updated_at": now,
+                                 "versions": versions[-50:]})
+                row, event_type = existing, "self_core_revised"
+            data["events"].append({"id": uuid.uuid4().hex, "type": event_type, "at": now, "target": record_id,
+                                   "source_ids": source_ids})
+            self._save(data)
+            return deepcopy(row)
+
+    def set_self_core_archived(self, record_id: str, archived: bool, reason: str) -> dict:
+        reason = str(reason).strip()
+        if not reason:
+            raise ValueError("reason is required")
+        now = utc_now()
+        with self.lock:
+            data = self._read()
+            row = next((item for item in data["self_core_records"] if item.get("id") == record_id), None)
+            if row is None:
+                raise KeyError(record_id)
+            row.update({"state": "archived" if archived else "active", "updated_at": now})
+            data["events"].append({"id": uuid.uuid4().hex, "type": "self_core_archived" if archived else "self_core_restored",
+                                   "at": now, "target": record_id, "reason": reason[:500]})
+            self._save(data)
+            return deepcopy(row)
+
+    def list_user_profile(self, state: str = "active") -> list[dict]:
+        rows = deepcopy(self.snapshot()["user_profile_records"])
+        if state != "all":
+            rows = [row for row in rows if row.get("state", "active") == state]
+        return sorted(rows, key=lambda row: (str(row.get("category", "")), str(row.get("created_at", ""))))
+
+    def upsert_user_profile(self, value: dict) -> dict:
+        text = str(value.get("text") or "").strip()
+        reason = str(value.get("reason") or "").strip()
+        subject = str(value.get("subject") or "user").strip()[:120]
+        category = str(value.get("category") or "preference").strip()
+        source_ids = [str(item).strip()[:160] for item in list(value.get("source_ids") or [])[:20] if str(item).strip()]
+        if category not in {"preference", "boundary", "communication", "context"}:
+            raise ValueError("category must be preference, boundary, communication, or context")
+        if not text or not reason or not source_ids:
+            raise ValueError("text, reason, and at least one source_id are required")
+        if len(text) > 1000:
+            raise ValueError("user profile text must contain at most 1000 characters")
+        record_id = str(value.get("id") or f"user_{uuid.uuid4().hex[:12]}")
+        now = utc_now()
+        with self.lock:
+            data = self._read()
+            existing = next((row for row in data["user_profile_records"] if row.get("id") == record_id), None)
+            if existing is None:
+                row = {"id": record_id, "subject": subject, "category": category, "text": text,
+                       "source_ids": source_ids, "reason": reason[:500], "state": "active",
+                       "created_at": now, "updated_at": now, "versions": []}
+                data["user_profile_records"].append(row)
+                event_type = "user_profile_added"
+            else:
+                versions = list(existing.get("versions") or [])
+                versions.append({key: deepcopy(existing.get(key)) for key in
+                                 ("subject", "category", "text", "source_ids", "reason", "updated_at")})
+                existing.update({"subject": subject, "category": category, "text": text,
+                                 "source_ids": source_ids, "reason": reason[:500], "updated_at": now,
+                                 "versions": versions[-50:]})
+                row, event_type = existing, "user_profile_revised"
+            data["events"].append({"id": uuid.uuid4().hex, "type": event_type, "at": now,
+                                   "target": record_id, "source_ids": source_ids})
+            self._save(data)
+            return deepcopy(row)
+
+    def set_user_profile_archived(self, record_id: str, archived: bool, reason: str) -> dict:
+        reason = str(reason).strip()
+        if not reason:
+            raise ValueError("reason is required")
+        now = utc_now()
+        with self.lock:
+            data = self._read()
+            row = next((item for item in data["user_profile_records"] if item.get("id") == record_id), None)
+            if row is None:
+                raise KeyError(record_id)
+            row.update({"state": "archived" if archived else "active", "updated_at": now})
+            data["events"].append({"id": uuid.uuid4().hex,
+                                   "type": "user_profile_archived" if archived else "user_profile_restored",
+                                   "at": now, "target": record_id, "reason": reason[:500]})
+            self._save(data)
+            return deepcopy(row)
 
     def list_relations(self) -> list[dict]:
         return sorted(deepcopy(self.snapshot()["relations"]), key=lambda row: row.get("updated_at", ""), reverse=True)
@@ -171,19 +302,77 @@ class BetaStore:
             raise ValueError("name and relation are required")
         relation_id = str(value.get("id") or f"relation_{uuid.uuid4().hex[:12]}")
         now = utc_now()
-        row = {"id": relation_id, "name": name[:120], "relation": relation[:120], "note": str(value.get("note", "")).strip()[:2000], "updated_at": now}
+        facts = [str(item).strip()[:500] for item in list(value.get("facts") or [])[:20] if str(item).strip()]
+        source_ids = [str(item).strip()[:160] for item in list(value.get("source_ids") or [])[:20] if str(item).strip()]
+        visibility = str(value.get("visibility") or "private")
+        if visibility not in {"private", "shared", "public"}:
+            raise ValueError("visibility must be private, shared, or public")
         with self.lock:
             data = self._read()
             existing = next((index for index, item in enumerate(data["relations"]) if item.get("id") == relation_id), None)
             if existing is None:
+                row = {"id": relation_id, "name": name[:120], "relation": relation[:120],
+                       "facts": facts, "private_note": str(value.get("private_note", value.get("note", ""))).strip()[:2000],
+                       "source_ids": source_ids, "visibility": visibility, "state": "active",
+                       "created_at": now, "updated_at": now, "versions": []}
                 data["relations"].append(row)
                 action = "relation_added"
             else:
+                previous = data["relations"][existing]
+                versions = list(previous.get("versions") or [])
+                versions.append({key: deepcopy(previous.get(key)) for key in ("name", "relation", "facts", "source_ids", "visibility", "updated_at")})
+                row = {**previous, "name": name[:120], "relation": relation[:120], "facts": facts,
+                       "private_note": str(value.get("private_note", value.get("note", previous.get("private_note", "")))).strip()[:2000],
+                       "source_ids": source_ids, "visibility": visibility, "updated_at": now, "versions": versions[-50:]}
                 data["relations"][existing] = row
                 action = "relation_updated"
             data["events"].append({"id": uuid.uuid4().hex, "type": action, "at": now, "target": relation_id})
             self._save(data)
         return row
+
+    def continuity_settings(self) -> dict:
+        return deepcopy(self.snapshot()["continuity_settings"])
+
+    def update_continuity_settings(self, value: dict) -> dict:
+        current = self.continuity_settings()
+        max_choices = int(value.get("max_choices", current.get("max_choices", 3)))
+        if max_choices < 1 or max_choices > 5:
+            raise ValueError("max_choices must be between 1 and 5")
+        budgets = dict(value.get("layer_budgets", current.get("layer_budgets", {})) or {})
+        total_budget = int(value.get("total_budget", current.get("total_budget", 5000)))
+        if total_budget < 1 or total_budget > 12000:
+            raise ValueError("total_budget must be between 1 and 12000")
+        allowed = {"self_core", "user_profile", "relations", "recent", "long_term", "history"}
+        if set(budgets) - allowed or any(int(item) < 0 or int(item) > 20000 for item in budgets.values()):
+            raise ValueError("invalid layer_budgets")
+        now = utc_now()
+        row = {"wakeup_enabled": bool(value.get("wakeup_enabled", current.get("wakeup_enabled", False))),
+               "adviser_enabled": bool(value.get("adviser_enabled", current.get("adviser_enabled", False))),
+               "max_choices": max_choices, "total_budget": total_budget,
+               "layer_budgets": {key: int(item) for key, item in budgets.items()},
+               "updated_at": now}
+        with self.lock:
+            data = self._read()
+            data["continuity_settings"] = row
+            data["events"].append({"id": uuid.uuid4().hex, "type": "continuity_settings_updated", "at": now,
+                                   "target": "continuity_settings"})
+            self._save(data)
+        return deepcopy(row)
+
+    def layered_context(self, query: str = "", include_history: bool = False, budgets: dict | None = None) -> dict:
+        settings = self.continuity_settings()
+        requested = dict(budgets or {})
+        configured = {**DEFAULT_LAYER_BUDGETS, **dict(settings.get("layer_budgets") or {})}
+        effective = dict(configured)
+        for key, value in requested.items():
+            if key not in DEFAULT_LAYER_BUDGETS:
+                raise ValueError("invalid layer budget")
+            effective[key] = min(int(value), int(configured[key]))
+        return build_layered_context(self.snapshot(), query=str(query), include_history=bool(include_history),
+                                     budgets=effective, total_budget=int(settings.get("total_budget", 5000)))
+
+    def wakeup_preview(self, signals: list[dict] | None = None, query: str = "", adviser_enabled: bool = False) -> dict:
+        return build_wakeup_preview(self.snapshot(), signals=signals, query=str(query), adviser_enabled=bool(adviser_enabled))
 
     def list_memories(self, state: str = "all") -> list[dict]:
         rows = self.snapshot()["memories"]
@@ -461,8 +650,8 @@ class BetaStore:
             return deepcopy(row)
 
     def route_candidate(self, candidate_id: str, destination: str, value: dict | None = None) -> dict:
-        if destination not in {"self_core", "relation"}:
-            raise ValueError("destination must be self_core or relation")
+        if destination not in {"self_core", "user_profile", "relation"}:
+            raise ValueError("destination must be self_core, user_profile, or relation")
         value = value or {}
         now = utc_now()
         with self.lock:
@@ -475,25 +664,60 @@ class BetaStore:
             if candidate.get("state", "pending") != "pending":
                 raise ValueError("candidate is no longer pending")
             if destination == "self_core":
-                text = str(value.get("text") or candidate.get("content") or "").strip()[:500]
-                if not text:
-                    raise ValueError("self_core text is required")
-                lines = list(data["profile"].get("self_core") or [])
-                if text not in lines:
-                    if len(lines) >= 20:
-                        raise ValueError("self_core already has 20 entries")
-                    lines.append(text)
-                data["profile"]["self_core"] = lines
-                data["profile"]["updated_at"] = now
-                target = "profile:self_core"
+                text = str(value.get("text") or candidate.get("content") or "").strip()
+                reason = str(value.get("reason") or "").strip()
+                if not text or not reason:
+                    raise ValueError("self_core text and reason are required")
+                if len(text) > 800:
+                    raise ValueError("self-core text must contain at most 800 characters")
+                source_ids = [candidate_id]
+                source_ids.extend(str(item).strip()[:160] for item in list(value.get("source_ids") or []) if str(item).strip())
+                source_ids = list(dict.fromkeys(source_ids))[:20]
+                target = str(value.get("id") or f"core_{uuid.uuid4().hex[:12]}")
+                if any(row.get("id") == target for row in data["self_core_records"]):
+                    raise ValueError("self_core id already exists")
+                data["self_core_records"].append({
+                    "id": target, "text": text, "source_ids": source_ids, "reason": reason[:500],
+                    "state": "active", "position": int(value.get("position", len(data["self_core_records"]))),
+                    "created_at": now, "updated_at": now, "versions": [],
+                })
+            elif destination == "user_profile":
+                text = str(value.get("text") or candidate.get("content") or "").strip()
+                reason = str(value.get("reason") or "").strip()
+                category = str(value.get("category") or "preference").strip()
+                if category not in {"preference", "boundary", "communication", "context"}:
+                    raise ValueError("invalid user profile category")
+                if not text or not reason:
+                    raise ValueError("user profile text and reason are required")
+                source_ids = list(dict.fromkeys([candidate_id] + [str(item).strip()[:160] for item in list(value.get("source_ids") or []) if str(item).strip()]))[:20]
+                target = str(value.get("id") or f"user_{uuid.uuid4().hex[:12]}")
+                if any(row.get("id") == target for row in data["user_profile_records"]):
+                    raise ValueError("user profile id already exists")
+                data["user_profile_records"].append({
+                    "id": target, "subject": str(value.get("subject") or "user").strip()[:120],
+                    "category": category, "text": text[:1000], "source_ids": source_ids,
+                    "reason": reason[:500], "state": "active", "created_at": now, "updated_at": now,
+                    "versions": [],
+                })
             else:
                 name = str(value.get("name") or candidate.get("title") or "").strip()[:120]
                 relation = str(value.get("relation") or "").strip()[:120]
                 if not name or not relation:
                     raise ValueError("relation name and relation are required")
                 relation_id = str(value.get("id") or f"relation_{uuid.uuid4().hex[:12]}")
-                row = {"id": relation_id, "name": name, "relation": relation,
-                       "note": str(value.get("note") or candidate.get("content") or "").strip()[:2000], "updated_at": now}
+                if any(row.get("id") == relation_id for row in data["relations"]):
+                    raise ValueError("relation id already exists")
+                facts = [str(item).strip()[:500] for item in list(value.get("facts") or [])[:20] if str(item).strip()]
+                source_ids = [candidate_id]
+                source_ids.extend(str(item).strip()[:160] for item in list(value.get("source_ids") or []) if str(item).strip())
+                source_ids = list(dict.fromkeys(source_ids))[:20]
+                visibility = str(value.get("visibility") or "private")
+                if visibility not in {"private", "shared", "public"}:
+                    raise ValueError("visibility must be private, shared, or public")
+                row = {"id": relation_id, "name": name, "relation": relation, "facts": facts,
+                       "private_note": str(value.get("private_note", value.get("note", candidate.get("content") or ""))).strip()[:2000],
+                       "source_ids": source_ids, "visibility": visibility, "state": "active",
+                       "created_at": now, "updated_at": now, "versions": []}
                 data["relations"].append(row)
                 target = relation_id
             candidate.update({"state": "routed", "routed_to": destination, "routed_target": target,
@@ -601,9 +825,10 @@ class BetaStore:
         if int(payload.get("schema", 0)) != self.SCHEMA:
             raise ValueError("unsupported import schema")
         clean = self._empty()
-        for key in ("memories", "candidates", "events", "relations", "rollbacks"):
+        for key in ("memories", "candidates", "events", "self_core_records", "user_profile_records",
+                    "relations", "rollbacks"):
             value = payload.get(key)
-            if value is None and key in {"relations", "rollbacks"}:
+            if value is None and key in {"self_core_records", "user_profile_records", "relations", "rollbacks"}:
                 value = []
             if not isinstance(value, list):
                 raise ValueError(f"{key} must be a list")
@@ -612,6 +837,10 @@ class BetaStore:
         if not isinstance(profile, dict):
             raise ValueError("profile must be an object")
         clean["profile"] = deepcopy(profile)
+        continuity_settings = payload.get("continuity_settings") or clean["continuity_settings"]
+        if not isinstance(continuity_settings, dict):
+            raise ValueError("continuity_settings must be an object")
+        clean["continuity_settings"] = deepcopy(continuity_settings)
         settings = payload.get("settings") or {"review_mode": "autonomous"}
         if (not isinstance(settings, dict)
                 or settings.get("review_mode", "autonomous") not in {"autonomous", "joint"}

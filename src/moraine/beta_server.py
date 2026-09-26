@@ -126,8 +126,24 @@ def create_beta_server(env: dict[str, str] | None = None):
                     return self._json(200, {"items": store.calendar()})
                 if parsed.path == "/api/profile":
                     return self._json(200, store.profile())
+                if parsed.path == "/api/self-core":
+                    return self._json(200, {"items": store.list_self_core(query.get("state", ["active"])[0])})
+                if parsed.path == "/api/user-profile":
+                    return self._json(200, {"items": store.list_user_profile(query.get("state", ["active"])[0])})
                 if parsed.path == "/api/relations":
                     return self._json(200, {"items": store.list_relations()})
+                if parsed.path == "/api/continuity/settings":
+                    return self._json(200, store.continuity_settings())
+                if parsed.path == "/api/recall/layered":
+                    context = store.layered_context(query.get("query", [""])[0],
+                                                    query.get("history", ["0"])[0] in {"1", "true", "yes"})
+                    if query.get("summary", ["0"])[0] in {"1", "true", "yes"}:
+                        context["layers"] = [
+                            {key: value for key, value in layer.items() if key != "items"}
+                            | {"item_count": len(layer.get("items") or [])}
+                            for layer in context["layers"]
+                        ]
+                    return self._json(200, context)
                 if parsed.path == "/api/settings":
                     return self._json(200, store.settings())
                 if parsed.path == "/api/adviser":
@@ -191,8 +207,35 @@ def create_beta_server(env: dict[str, str] | None = None):
                     return self._json(200, store.replace_all(body))
                 if parsed.path == "/api/profile":
                     return self._json(200, store.update_profile(body))
+                if parsed.path == "/api/self-core":
+                    return self._json(200, store.upsert_self_core(body))
+                if parsed.path.startswith("/api/self-core/"):
+                    parts = parsed.path.split("/")
+                    if len(parts) == 5 and parts[4] in {"archive", "restore"}:
+                        return self._json(200, store.set_self_core_archived(parts[3], parts[4] == "archive",
+                                                                           str(body.get("reason") or "")))
+                if parsed.path == "/api/user-profile":
+                    return self._json(200, store.upsert_user_profile(body))
+                if parsed.path.startswith("/api/user-profile/"):
+                    parts = parsed.path.split("/")
+                    if len(parts) == 5 and parts[4] in {"archive", "restore"}:
+                        return self._json(200, store.set_user_profile_archived(parts[3], parts[4] == "archive",
+                                                                               str(body.get("reason") or "")))
                 if parsed.path == "/api/relations":
                     return self._json(200, store.upsert_relation(body))
+                if parsed.path == "/api/continuity/settings":
+                    return self._json(200, store.update_continuity_settings(body))
+                if parsed.path == "/api/recall/layered":
+                    return self._json(200, store.layered_context(str(body.get("query") or ""),
+                                                                 bool(body.get("include_history", False)),
+                                                                 dict(body.get("budgets") or {})))
+                if parsed.path == "/api/wakeup/preview":
+                    adviser_status = adviser.public()
+                    return self._json(200, store.wakeup_preview(list(body.get("signals") or []),
+                                                                str(body.get("query") or ""),
+                                                                bool(body.get("adviser_enabled", False)
+                                                                     and adviser_status["enabled"]
+                                                                     and adviser_status["use_for_wakeup"])))
                 if parsed.path == "/api/settings":
                     return self._json(200, store.update_settings(body))
                 if parsed.path == "/api/adviser":

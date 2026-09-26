@@ -110,11 +110,15 @@ class BetaStoreTest(unittest.TestCase):
         profile = store.update_profile({
             "display_name": "测试小机",
             "summary": "只使用合成资料",
-            "self_core": ["我可以修改自己的定义。", "私人内容默认不公开。"],
         })
         relation = store.upsert_relation({"name": "测试同行者", "relation": "协作者", "note": "合成关系"})
+        user_profile = store.upsert_user_profile({"subject": "测试同行者", "category": "preference",
+                                                  "text": "喜欢先看结论", "reason": "合成确认",
+                                                  "source_ids": ["source-profile"]})
         settings = store.update_settings({"review_mode": "joint"})
-        self.assertEqual(profile["self_core"][0], "我可以修改自己的定义。")
+        self.assertEqual(profile["self_core"], [])
+        with self.assertRaisesRegex(ValueError, "legacy"):
+            store.update_profile({"display_name": "测试小机", "summary": "合成资料", "self_core": ["无出处身份"]})
         self.assertEqual(store.list_relations()[0]["id"], relation["id"])
         self.assertEqual(settings["review_mode"], "joint")
 
@@ -122,6 +126,7 @@ class BetaStoreTest(unittest.TestCase):
         second.replace_all(store.snapshot())
         self.assertEqual(second.profile()["display_name"], "测试小机")
         self.assertEqual(second.list_relations()[0]["name"], "测试同行者")
+        self.assertEqual(second.list_user_profile()[0]["id"], user_profile["id"])
         self.assertEqual(second.settings()["review_mode"], "joint")
 
     def test_legacy_jev_setting_is_ignored_on_import(self):
@@ -150,11 +155,32 @@ class BetaStoreTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "disabled"):
             store.route_candidate(identity["id"], "self_core")
         store.update_settings({"identity_relation_routing": True})
-        store.route_candidate(identity["id"], "self_core")
-        self.assertIn("我允许自己改变。", store.profile()["self_core"])
+        with self.assertRaisesRegex(ValueError, "reason"):
+            store.route_candidate(identity["id"], "self_core")
+        store.route_candidate(identity["id"], "self_core", {"reason": "小然确认的身份陈述"})
+        self.assertEqual(store.list_self_core()[0]["text"], "我允许自己改变。")
+        recalled = store.layered_context()
+        self_core = next(layer for layer in recalled["layers"] if layer["name"] == "self_core")
+        self.assertEqual(self_core["items"][0]["text"], "我允许自己改变。")
+        self.assertEqual(self_core["items"][0]["source_ids"], [identity["id"]])
         relation = store.add_candidate({"title": "同行者", "content": "共同做项目", "kind": "relationship"})
         store.route_candidate(relation["id"], "relation", {"name": "同行者", "relation": "协作者"})
         self.assertEqual(store.list_relations()[0]["relation"], "协作者")
+        preference = store.add_candidate({"title": "沟通偏好", "content": "喜欢先看结论", "kind": "preference"})
+        store.route_candidate(preference["id"], "user_profile", {"subject": "同行者", "category": "communication",
+                                                                   "reason": "对方明确说明"})
+        self.assertEqual(store.list_user_profile()[0]["text"], "喜欢先看结论")
+        result = store.layered_context(query="共同做项目")
+        relations = next(layer for layer in result["layers"] if layer["name"] == "relations")
+        self.assertEqual(relations["items"], [])
+
+    def test_requested_layer_budgets_can_only_reduce_configuration(self):
+        store = make_store(self.root)
+        store.update_continuity_settings({"total_budget": 400, "layer_budgets": {"recent": 120}})
+        result = store.layered_context(budgets={"recent": 20000})
+        recent = next(layer for layer in result["layers"] if layer["name"] == "recent")
+        self.assertEqual(recent["budget"], 120)
+        self.assertEqual(result["total_budget"], 400)
 
     def test_candidate_retention_shreds_only_eligible_content(self):
         store = make_store(self.root)
@@ -194,6 +220,31 @@ class BetaStoreTest(unittest.TestCase):
         result = store.replace_memory(memory["id"], replacement["id"], "事实后来变化")
         self.assertEqual(result["old"]["state"], "superseded")
         self.assertEqual(store.list_memories("historical")[0]["superseded_by"], replacement["id"])
+
+    def test_versioned_self_core_relation_and_wakeup_preview(self):
+        store = make_store(self.root)
+        core = store.upsert_self_core({"text": "我是合成Agent", "reason": "首次认领", "source_ids": ["source-1"]})
+        revised = store.upsert_self_core({"id": core["id"], "text": "我是可修订的合成Agent", "reason": "补充边界",
+                                          "source_ids": ["source-1", "source-2"]})
+        self.assertEqual(len(revised["versions"]), 1)
+        user_profile = store.upsert_user_profile({"subject": "测试者", "category": "boundary",
+                                                  "text": "只使用合成资料", "reason": "明确边界",
+                                                  "source_ids": ["source-user-1"]})
+        revised_user = store.upsert_user_profile({"id": user_profile["id"], "subject": "测试者",
+                                                  "category": "boundary", "text": "只在本地使用合成资料",
+                                                  "reason": "边界修订", "source_ids": ["source-user-2"]})
+        self.assertEqual(len(revised_user["versions"]), 1)
+        relation = store.upsert_relation({"name": "测试者", "relation": "协作者", "facts": ["共同验收"],
+                                          "private_note": "不公开", "source_ids": ["source-3"]})
+        self.assertEqual(relation["facts"], ["共同验收"])
+        disabled = store.wakeup_preview([{"id": "mail-1", "kind": "mail", "label": "新邮件"}])
+        self.assertFalse(disabled["enabled"])
+        store.update_continuity_settings({"wakeup_enabled": True, "adviser_enabled": True})
+        preview = store.wakeup_preview([{"id": "mail-1", "kind": "mail", "label": "新邮件",
+                                         "share_with_adviser": True}], adviser_enabled=True)
+        self.assertTrue(preview["enabled"])
+        self.assertNotIn("不公开", str(preview["context"]))
+        self.assertFalse(preview["adviser_request"]["can_execute"])
 
 
 if __name__ == "__main__":

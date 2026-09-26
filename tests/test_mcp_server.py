@@ -61,7 +61,10 @@ class McpToolsTest(unittest.IsolatedAsyncioTestCase):
                         "rollback_list", "consolidation_rollback",
                         "memory_set_archived", "memory_set_importance", "memory_revise", "memory_replace",
                         "event_list", "calendar_list", "profile_get", "profile_update",
-                        "relation_list", "relation_upsert", "settings_get", "settings_update",
+                        "self_core_list", "self_core_upsert", "self_core_set_archived",
+                        "user_profile_list", "user_profile_upsert", "user_profile_set_archived",
+                        "relation_list", "relation_upsert", "layered_recall", "wakeup_preview",
+                        "continuity_settings_get", "continuity_settings_update", "settings_get", "settings_update",
                         "snapshot_list", "snapshot_create", "snapshot_restore",
                         "store_export", "store_import",
                     },
@@ -108,10 +111,37 @@ class McpToolsTest(unittest.IsolatedAsyncioTestCase):
                 rolled_back = payload(await session.call_tool("consolidation_rollback", {"rollback_id": rollback_applied["rollback"]["id"]}))
                 self.assertEqual(rolled_back["restored_candidate_ids"], [rollback_added["id"]])
 
-                profile = await session.call_tool("profile_update", {"display_name": "测试小机", "summary": "合成资料", "self_core": ["允许修订"]})
+                profile = await session.call_tool("profile_update", {"display_name": "测试小机", "summary": "合成资料"})
                 self.assertEqual(payload(profile)["display_name"], "测试小机")
                 relation = await session.call_tool("relation_upsert", {"name": "测试同行者", "relation": "协作者", "note": "合成关系"})
                 self.assertEqual(payload(relation)["relation"], "协作者")
+                core = payload(await session.call_tool("self_core_upsert", {
+                    "text": "我是可修订的合成Agent", "reason": "MCP协议验收", "source_ids": [memory["id"]],
+                }))
+                self.assertEqual(len(payload(await session.call_tool("self_core_list", {}))["items"]), 1)
+                user_profile = payload(await session.call_tool("user_profile_upsert", {
+                    "subject": "测试者", "category": "communication", "text": "喜欢先看结论",
+                    "reason": "MCP协议验收", "source_ids": [memory["id"]],
+                }))
+                self.assertEqual(len(payload(await session.call_tool("user_profile_list", {}))["items"]), 1)
+                layered = payload(await session.call_tool("layered_recall", {"query": "测试同行者"}))
+                self.assertTrue(layered["recall_is_evidence_not_fact"])
+                continuity = payload(await session.call_tool("continuity_settings_update", {
+                    "wakeup_enabled": True, "adviser_enabled": False, "max_choices": 2,
+                }))
+                self.assertTrue(continuity["wakeup_enabled"])
+                wakeup = payload(await session.call_tool("wakeup_preview", {
+                    "signals": [{"id": "mail-1", "kind": "mail", "label": "合成新邮件"}],
+                }))
+                self.assertFalse(wakeup["executed"])
+                archived_core = payload(await session.call_tool("self_core_set_archived", {
+                    "record_id": core["id"], "archived": True, "reason": "协议验收",
+                }))
+                self.assertEqual(archived_core["state"], "archived")
+                archived_user = payload(await session.call_tool("user_profile_set_archived", {
+                    "record_id": user_profile["id"], "archived": True, "reason": "协议验收",
+                }))
+                self.assertEqual(archived_user["state"], "archived")
                 settings = await session.call_tool("settings_update", {"review_mode": "joint"})
                 self.assertEqual(payload(settings)["review_mode"], "joint")
 

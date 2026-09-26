@@ -134,10 +134,14 @@ def create_mcp(client: MoraineClient) -> FastMCP:
         return client.request(f"/api/candidates/{urllib.parse.quote(candidate_id, safe='')}/{action}", "POST", {})
 
     @server.tool(annotations=reversible_write)
-    def candidate_route(candidate_id: str, destination: str, name: str = "", relation: str = "", text: str = "", note: str = "") -> dict:
+    def candidate_route(candidate_id: str, destination: str, name: str = "", relation: str = "", text: str = "",
+                        note: str = "", reason: str = "", source_ids: list[str] | None = None,
+                        facts: list[str] | None = None, visibility: str = "private") -> dict:
         """Route a reviewed identity or relationship candidate to self-core or the relation graph. The setting must be enabled first."""
         return client.request(f"/api/candidates/{urllib.parse.quote(candidate_id, safe='')}/route", "POST",
-                              {"destination": destination, "name": name, "relation": relation, "text": text, "note": note})
+                              {"destination": destination, "name": name, "relation": relation, "text": text,
+                               "note": note, "reason": reason, "source_ids": source_ids or [],
+                               "facts": facts or [], "visibility": visibility})
 
     @server.tool(annotations=reversible_write)
     def candidate_shred_expired() -> dict:
@@ -216,15 +220,58 @@ def create_mcp(client: MoraineClient) -> FastMCP:
 
     @server.tool(annotations=read_only)
     def profile_get() -> dict:
-        """Read the Agent's display name, summary, and compact self-core."""
+        """Read the Agent's display name and summary. A legacy self_core field may be present but is not recalled."""
         return client.request("/api/profile")
 
     @server.tool(annotations=reversible_write)
-    def profile_update(display_name: str, summary: str, self_core: list[str]) -> dict:
-        """Update the Agent's own profile and compact self-core. Keep it revisable and avoid turning detailed life history into permanent core text."""
-        return client.request(
-            "/api/profile", "POST", {"display_name": display_name, "summary": summary, "self_core": self_core}
-        )
+    def profile_update(display_name: str, summary: str) -> dict:
+        """Update display metadata only. Use self_core_upsert for source-linked, revisable identity statements."""
+        return client.request("/api/profile", "POST", {"display_name": display_name, "summary": summary})
+
+    @server.tool(annotations=read_only)
+    def self_core_list(state: str = "active") -> dict:
+        """Read the compact, source-linked and revisable identity core. Detailed biography belongs in normal memory, not here."""
+        if state not in {"active", "archived", "all"}:
+            raise ValueError("state must be active, archived, or all")
+        return client.request(f"/api/self-core?{urllib.parse.urlencode({'state': state})}")
+
+    @server.tool(annotations=reversible_write)
+    def self_core_upsert(text: str, reason: str, source_ids: list[str], record_id: str | None = None,
+                         position: int = 0) -> dict:
+        """Add or revise one source-linked identity statement. A reason and at least one source ID are mandatory."""
+        payload: dict[str, Any] = {"text": text, "reason": reason, "source_ids": source_ids, "position": position}
+        if record_id:
+            payload["id"] = record_id
+        return client.request("/api/self-core", "POST", payload)
+
+    @server.tool(annotations=reversible_write)
+    def self_core_set_archived(record_id: str, archived: bool, reason: str) -> dict:
+        """Reversibly remove or restore an identity statement while preserving its versions and sources."""
+        action = "archive" if archived else "restore"
+        return client.request(f"/api/self-core/{urllib.parse.quote(record_id, safe='')}/{action}", "POST", {"reason": reason})
+
+    @server.tool(annotations=read_only)
+    def user_profile_list(state: str = "active") -> dict:
+        """Read source-linked statements about the human user. These are separate from the Agent's self-core and remain revisable."""
+        if state not in {"active", "archived", "all"}:
+            raise ValueError("state must be active, archived, or all")
+        return client.request(f"/api/user-profile?{urllib.parse.urlencode({'state': state})}")
+
+    @server.tool(annotations=reversible_write)
+    def user_profile_upsert(text: str, reason: str, source_ids: list[str], category: str = "preference",
+                            subject: str = "user", record_id: str | None = None) -> dict:
+        """Add or revise one attributable user-profile statement. Do not infer preferences, boundaries, or identity without a source."""
+        payload: dict[str, Any] = {"text": text, "reason": reason, "source_ids": source_ids,
+                                  "category": category, "subject": subject}
+        if record_id:
+            payload["id"] = record_id
+        return client.request("/api/user-profile", "POST", payload)
+
+    @server.tool(annotations=reversible_write)
+    def user_profile_set_archived(record_id: str, archived: bool, reason: str) -> dict:
+        """Reversibly remove or restore a user-profile statement while preserving its versions and provenance."""
+        action = "archive" if archived else "restore"
+        return client.request(f"/api/user-profile/{urllib.parse.quote(record_id, safe='')}/{action}", "POST", {"reason": reason})
 
     @server.tool(annotations=read_only)
     def relation_list() -> dict:
@@ -232,12 +279,41 @@ def create_mcp(client: MoraineClient) -> FastMCP:
         return client.request("/api/relations")
 
     @server.tool(annotations=reversible_write)
-    def relation_upsert(name: str, relation: str, note: str = "", relation_id: str | None = None) -> dict:
+    def relation_upsert(name: str, relation: str, facts: list[str] | None = None, source_ids: list[str] | None = None,
+                        private_note: str = "", note: str = "", visibility: str = "private",
+                        relation_id: str | None = None) -> dict:
         """Create or update a relationship node. Record attributable relationship facts; do not infer mutual status from message frequency or similarity alone."""
-        payload: dict[str, Any] = {"name": name, "relation": relation, "note": note}
+        payload: dict[str, Any] = {"name": name, "relation": relation, "facts": facts or [],
+                                  "source_ids": source_ids or [], "private_note": private_note or note,
+                                  "visibility": visibility}
         if relation_id:
             payload["id"] = relation_id
         return client.request("/api/relations", "POST", payload)
+
+    @server.tool(annotations=read_only)
+    def layered_recall(query: str = "", include_history: bool = False) -> dict:
+        """Build a bounded context projection across self-core, user profile, relations, recent, long-term, and optional history."""
+        return client.request("/api/recall/layered", "POST", {"query": query, "include_history": include_history})
+
+    @server.tool(annotations=read_only)
+    def wakeup_preview(signals: list[dict] | None = None, query: str = "", adviser_enabled: bool = False) -> dict:
+        """Preview a wakeup envelope without executing actions, writing memories, or calling an adviser."""
+        return client.request("/api/wakeup/preview", "POST", {"signals": signals or [], "query": query,
+                                                               "adviser_enabled": adviser_enabled})
+
+    @server.tool(annotations=read_only)
+    def continuity_settings_get() -> dict:
+        """Read opt-in wakeup, adviser, choice-limit, and layer-budget settings."""
+        return client.request("/api/continuity/settings")
+
+    @server.tool(annotations=reversible_write)
+    def continuity_settings_update(wakeup_enabled: bool, adviser_enabled: bool = False, max_choices: int = 3,
+                                   total_budget: int = 5000, layer_budgets: dict[str, int] | None = None) -> dict:
+        """Configure zero-write wakeup previews and bounded recall. External actions remain separately authorized."""
+        return client.request("/api/continuity/settings", "POST", {
+            "wakeup_enabled": wakeup_enabled, "adviser_enabled": adviser_enabled,
+            "max_choices": max_choices, "total_budget": total_budget, "layer_budgets": layer_budgets or {},
+        })
 
     @server.tool(annotations=read_only)
     def settings_get() -> dict:
@@ -274,7 +350,7 @@ def create_mcp(client: MoraineClient) -> FastMCP:
 
     @server.tool(annotations=read_only)
     def store_export() -> dict:
-        """Export the complete portable store, including memories, candidates, relations, profile, settings, and audit events. Treat the result as private."""
+        """Export the complete portable store, including memories, candidates, self-core, user profile, relations, settings, and audit events. Treat the result as private."""
         return client.request("/api/export")
 
     @server.tool(annotations=replacing_write)

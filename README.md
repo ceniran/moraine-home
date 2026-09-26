@@ -2,7 +2,7 @@
 
 > The sanitized standalone beta is available in-tree. See the [standalone beta guide](docs/beta-standalone.md); it uses synthetic examples and relative data paths, never our private production instance.
 
-Current prerelease: `v0.2.0-beta.1`. Chinese first-time testers can follow the [ten-minute first-run guide](docs/first-run.zh-CN.md).
+Current prerelease: `v0.3.0-beta.1`. Chinese first-time testers can follow the [ten-minute first-run guide](docs/first-run.zh-CN.md).
 
 <p align="center">
   <img src="assets/moraine-stone.png" width="220" alt="Moraine stone mark with layered mineral veins">
@@ -31,6 +31,8 @@ The practical benefits are:
 Moraine's core retrieval uses local keyword and local-vector paths only. It does not send queries or candidate summaries to an external adviser model.
 
 The Settings view can store an optional Jev adviser credential for the Agent runtime, for example to request a second opinion during autonomous wakeups. The credential lives in a separate `0600` file and never enters core retrieval, memories, portable exports, or MCP results.
+
+Moraine provides a safe wakeup preview, not a scheduler, rotation loop, message sender, or action executor. Deployers must supply a host Agent or orchestrator that decides when to request a preview, whether to act, and how to execute an action. The preview works without Jev; Jev is only an optional second opinion and never replaces the orchestrator.
 ## What the complete private deployment does
 
 Our real deployment has been used with hundreds of private memories and currently includes:
@@ -43,11 +45,12 @@ Our real deployment has been used with hundreds of private memories and currentl
 - an event calendar based on when events actually occurred;
 - weighting, down-weighting, core locks, decay, archive, restore, and audit trails;
 - a very small `self-core` for identity continuity, with detailed experience recalled on demand;
+- a separate, source-linked user profile for stable preferences, boundaries, communication habits, and durable context;
 - a confirmable relationship graph that does not reduce relationships to proximity scores;
 - import preview, export, snapshots, and recovery paths;
 - a mobile PWA for overview, library, candidates, calendar, workbench, private study, and settings.
 
-The standalone beta now provides the general-purpose parts of this flow. Private mail sync, study-room content, autonomous wakeups, and deployment-specific adapters are deliberately excluded.
+The standalone beta now provides the general-purpose parts of this flow and a zero-write wakeup preview. Private mail sync, study-room content, scheduled wakeup orchestration, and deployment-specific adapters are deliberately excluded.
 
 ## What this public repository includes today
 
@@ -59,8 +62,8 @@ The standalone beta now provides the general-purpose parts of this flow. Private
 - contracts for episode candidates, bi-temporal validity, and bounded core projections;
 - reversible decision ledgers, review stores, and cross-memory experience-thread candidates;
 - a systemd example, synthetic fixtures, and tests that do not read private data.
-- a standalone local store and mobile PWA covering event baskets, five relation-aware consolidation modes, revision, replacement, weighting, calendar, audit, archive/restore, self-core, a generic relationship graph, and portable import/export;
-- an optional local MCP adapter that gives the owning Agent the same memory-management surface as the human workbench, including governance, profile, relations, and portable import/export.
+- a standalone local store and mobile PWA covering event baskets, five relation-aware consolidation modes, revision, replacement, weighting, calendar, audit, archive/restore, source-linked self-core, a separate user profile, a generic relationship graph, layered recall, and portable import/export;
+- an optional local MCP adapter that gives the owning Agent the same memory-management surface as the human workbench, including governance, self-core, user profile, relations, layered recall, and portable import/export.
 
 ## A good fit for
 
@@ -84,29 +87,21 @@ The standalone beta now provides the general-purpose parts of this flow. Private
 4. The integrated product is still a beta; installation, onboarding, and public interfaces may change.
 5. A memory system does not grant or prove continuity, consciousness, or personhood. It only preserves traceable context.
 
-## Quick start: current public core
+## Quick start: standalone workbench
 
 Python 3.10 or newer is required.
 
 ```bash
 git clone https://github.com/ceniran/moraine-home.git
 cd moraine-home
-python3 -m venv .venv
-.venv/bin/pip install -e .
 cp .env.example .env
-
-set -a
-. ./.env
-set +a
-.venv/bin/moraine
+scripts/run-beta.sh
 ```
 
 Then check the service:
 
 ```bash
-curl http://127.0.0.1:4781/health
-curl -H "Authorization: Bearer $MORAINE_API_TOKEN" \
-  "http://127.0.0.1:4781/search?query=what%20I%20remember&limit=5"
+curl http://127.0.0.1:4790/api/health
 ```
 
 See [`docs/integration.md`](docs/integration.md) for data shapes, APIs, security boundaries, and systemd setup; [`docs/governance.md`](docs/governance.md) for strength rules; and [`docs/memory-layers.md`](docs/memory-layers.md) for candidate and temporal contracts.

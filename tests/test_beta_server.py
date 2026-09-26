@@ -75,7 +75,7 @@ class BetaServerTest(unittest.TestCase):
         exported = self.request("/api/export")[1]
         self.assertEqual(self.request("/api/import", "POST", exported)[1]["active"], 2)
 
-        profile = self.request("/api/profile", "POST", {"display_name": "测试小机", "summary": "合成身份", "self_core": ["可修订"]})[1]
+        profile = self.request("/api/profile", "POST", {"display_name": "测试小机", "summary": "合成身份"})[1]
         self.assertEqual(profile["display_name"], "测试小机")
         relation = self.request("/api/relations", "POST", {"name": "同行者", "relation": "协作者", "note": "合成节点"})[1]
         self.assertEqual(relation["relation"], "协作者")
@@ -101,7 +101,9 @@ class BetaServerTest(unittest.TestCase):
         })[1]
         self.assertTrue(settings["identity_relation_routing"])
         identity = self.request("/api/candidates", "POST", {"title": "身份", "content": "允许修订", "kind": "identity"})[1]
-        routed = self.request(f"/api/candidates/{identity['id']}/route", "POST", {"destination": "self_core"})[1]
+        routed = self.request(f"/api/candidates/{identity['id']}/route", "POST", {
+            "destination": "self_core", "reason": "合成身份由测试确认",
+        })[1]
         self.assertEqual(routed["destination"], "self_core")
         snapshot = self.request("/api/snapshots", "POST", {"label": "合成安全点"})[1]
         self.assertEqual(self.request("/api/snapshots")[1]["items"][0]["id"], snapshot["id"])
@@ -130,6 +132,42 @@ class BetaServerTest(unittest.TestCase):
         self.assertEqual(stat.S_IMODE(secret_file.stat().st_mode), 0o600)
         cleared = self.request("/api/adviser", "POST", {"clear_api_key": True, "enabled": False})[1]
         self.assertFalse(cleared["configured"])
+
+    def test_continuity_backend_http_chain(self):
+        core = self.request("/api/self-core", "POST", {
+            "text": "我是合成Agent", "reason": "合成测试", "source_ids": ["m1"],
+        })[1]
+        self.assertEqual(self.request("/api/self-core")[1]["items"][0]["id"], core["id"])
+        user_profile = self.request("/api/user-profile", "POST", {
+            "subject": "测试者", "category": "communication", "text": "喜欢先看结论",
+            "reason": "合成测试", "source_ids": ["m1"],
+        })[1]
+        self.assertEqual(self.request("/api/user-profile")[1]["items"][0]["id"], user_profile["id"])
+        relation = self.request("/api/relations", "POST", {
+            "name": "测试者", "relation": "协作者", "facts": ["共同验收"],
+            "private_note": "不进入召回", "source_ids": ["m1"],
+        })[1]
+        self.assertEqual(relation["facts"], ["共同验收"])
+        settings = self.request("/api/continuity/settings", "POST", {
+            "wakeup_enabled": True, "adviser_enabled": True, "max_choices": 2,
+        })[1]
+        self.assertTrue(settings["wakeup_enabled"])
+        self.request("/api/adviser", "POST", {"api_key": "synthetic-key", "enabled": True, "use_for_wakeup": True})
+        layered = self.request("/api/recall/layered", "POST", {"query": "测试者"})[1]
+        self.assertNotIn("不进入召回", str(layered))
+        self.assertIn("喜欢先看结论", str(layered))
+        summary = self.request("/api/recall/layered?summary=1")[1]
+        self.assertNotIn("我是合成Agent", json.dumps(summary, ensure_ascii=False))
+        self.assertTrue(all("items" not in layer and "item_count" in layer for layer in summary["layers"]))
+        wakeup = self.request("/api/wakeup/preview", "POST", {
+            "signals": [{"id": "mail-1", "kind": "mail", "label": "新邮件", "necessary": True,
+                         "share_with_adviser": True}],
+            "adviser_enabled": True,
+        })[1]
+        self.assertFalse(wakeup["executed"])
+        self.assertFalse(wakeup["adviser_request"]["can_write_memory"])
+        archived_profile = self.request(f"/api/user-profile/{user_profile['id']}/archive", "POST", {"reason": "合成归档"})[1]
+        self.assertEqual(archived_profile["state"], "archived")
 
 if __name__ == "__main__":
     unittest.main()
