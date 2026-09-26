@@ -79,7 +79,7 @@ def build_layered_context(snapshot: Mapping, *, query: str = "", include_history
     legacy_recent_limit = max(1, min(MAX_LEGACY_RECENT_ITEMS, int(limits["recent"]) // LEGACY_ITEM_ESTIMATE))
     recent = explicit_recent + legacy[:legacy_recent_limit]
     long_term = explicit_long_term + legacy[legacy_recent_limit:]
-    history_reserve = min(int(limits["history"]), total_budget) if include_history else 0
+    history_reserve = min(int(limits["history"]), total_budget // 4) if include_history else 0
     layers, remaining = [], total_budget - history_reserve
     for name, rows, text_keys in (
         ("self_core", core, ("text",)), ("user_profile", user_profile, ("subject", "category", "text")),

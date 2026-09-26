@@ -66,6 +66,14 @@ class ContinuityTests(unittest.TestCase):
         self.assertGreater(history["budget"], 0)
         self.assertEqual([row["id"] for row in history["items"]], ["m2"])
 
+    def test_history_reserve_cannot_starve_current_layers(self):
+        self.snapshot["continuity_settings"]["layer_budgets"] = {"history": 20000}
+        result = build_layered_context(self.snapshot, include_history=True, total_budget=5000)
+        layers = {layer["name"]: layer for layer in result["layers"]}
+        self.assertLessEqual(layers["history"]["budget"], 1250)
+        self.assertGreater(layers["self_core"]["budget"], 0)
+        self.assertEqual([row["id"] for row in layers["self_core"]["items"]], ["core-1"])
+
     def test_wakeup_is_disabled_by_default(self):
         self.snapshot["continuity_settings"]["wakeup_enabled"] = False
         result = build_wakeup_preview(self.snapshot, signals=[])
