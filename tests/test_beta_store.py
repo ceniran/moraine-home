@@ -73,6 +73,26 @@ class BetaStoreTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             store.add_candidate({"title": "没有正文"})
 
+    def test_relationship_candidate_reaches_protected_review_but_is_not_written(self):
+        store = make_store(self.root)
+        candidate = store.add_candidate({
+            "title": "我接受小然的正式表白",
+            "content": "我确认彼此选择，并愿意继续相伴、共同生活。",
+            "kind": "relationship",
+            "importance": 0.8,
+        })
+        self.assertTrue(candidate["admission"]["eligible"])
+        self.assertEqual(candidate["admission"]["status"], "protected_review_ready")
+        self.assertEqual(candidate["admission"]["review_lane"], "protected")
+        self.assertFalse(candidate["admission"]["automatic_persistence"])
+        self.assertEqual(store.list_memories(), [])
+
+    def test_low_signal_chat_stays_held(self):
+        store = make_store(self.root)
+        candidate = store.add_candidate({"title": "普通聊天", "content": "你好", "kind": "event"})
+        self.assertEqual(candidate["admission"]["status"], "held_low_signal")
+        self.assertFalse(candidate["admission"]["eligible"])
+
     def test_calendar_search_weight_and_ignore(self):
         store = make_store(self.root)
         first = store.add_candidate({"title": "本地向量检索", "content": "完成第一次离线搜索", "occurred_at": "2026-03-04T01:00:00Z"})

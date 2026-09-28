@@ -246,6 +246,12 @@ function render() {
         return groups;
       }, {});
   const tierLabels = { recent: "建议近期", long_term: "建议长期" };
+  const admissionLabels = {
+    protected_review_ready: "已达专门复核门槛 · 尚未写入",
+    protected_review: "受保护候选 · 等待更多稳定证据",
+    ready_for_review: "已达复核门槛 · 尚未写入",
+    held_low_signal: "信号不足 · 继续暂存",
+  };
   $("#candidate-list").innerHTML =
     Object.entries(baskets)
       .map(
@@ -257,6 +263,9 @@ function render() {
               );
               const tierHint = tier
                 ? `<p class="muted">依据：${tier.reasons.map(esc).join("、")}；仅供确认，尚未写入</p>`
+                : "";
+              const admissionHint = row.admission
+                ? `<p class="muted">准入：${esc(admissionLabels[row.admission.status] || row.admission.status)}；证据 ${row.admission.signal_count || 0} 项</p>`
                 : "";
               const routeCore =
                 state.settings.identity_relation_routing &&
@@ -278,7 +287,7 @@ function render() {
                 <span><button type="button" class="row-action" data-ignore="${esc(row.id)}">忽略</button>
                   <h3>${esc(row.title)}</h3>
                   <span class="item-meta">${date(row.occurred_at)} · ${esc(row.kind || "event")}${tier ? ` · ${esc(tierLabels[tier.suggested_tier])}` : ""}</span>
-                  <p>${esc(row.content)}</p>${tierHint}
+                  <p>${esc(row.content)}</p>${admissionHint}${tierHint}
                   <select class="relation-select" data-relation="${esc(row.id)}">
                     <option value="supplement">补充：汇入同一事件</option><option value="duplicate">重复：压缩硬重复</option>
                     <option value="evolution">更迭：发展线与当前状态</option><option value="conflict">冲突：并存为未决冲突</option>

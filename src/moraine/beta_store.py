@@ -9,6 +9,7 @@ from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from .admission import classify_candidate
 from .consolidate import consolidate
 from .continuity import DEFAULT_LAYER_BUDGETS, build_layered_context, build_wakeup_preview
 from .memory_tiering import derive_tiering_evidence, suggest_memory_tier
@@ -385,6 +386,8 @@ class BetaStore:
 
     def list_candidates(self) -> list[dict]:
         rows = self.snapshot()["candidates"]
+        for row in rows:
+            row.setdefault("admission", classify_candidate(row))
         return sorted(rows, key=lambda row: row.get("created_at", ""))
 
     def tiering_suggestions(self) -> list[dict]:
@@ -441,7 +444,9 @@ class BetaStore:
             "created_at": now,
             "state": "pending",
             "basket": str(value.get("basket") or "unassigned")[:120],
+            "requested_importance": max(0.0, min(1.0, float(value.get("requested_importance", value.get("importance", 0.5))))),
         }
+        row["admission"] = classify_candidate(row)
         if value.get("expires_at"):
             row["expires_at"] = str(value["expires_at"])
         with self.lock:
