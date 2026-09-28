@@ -18,8 +18,11 @@ else
   echo "release check: MCP protocol test skipped (install with pip install -e '.[mcp]')"
 fi
 python3 -m compileall -q src/moraine/beta_store.py src/moraine/beta_server.py src/moraine/mcp_server.py
-node --check src/moraine/static/app.js
-node --check src/moraine/static/service-worker.js
+node --check src/moraine/static/auth.js
+node --check src/moraine/static/prototype.js
+node --check src/moraine/static/execution-plan.js
+node --check src/moraine/static/rehearsal-executor.js
+node --check src/moraine/static/relation-aware-draft.js
 git diff --check
 
 echo "release check: ok"

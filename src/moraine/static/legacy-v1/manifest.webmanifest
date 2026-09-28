@@ -1,0 +1,12 @@
+{
+  "name": "Moraine 记忆库",
+  "short_name": "Moraine",
+  "description": "本地优先、可整理和修订的个人记忆库",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f4f4f0",
+  "theme_color": "#f4f4f0",
+  "icons": [
+    {"src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable"}
+  ]
+}

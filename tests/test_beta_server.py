@@ -113,6 +113,33 @@ class BetaServerTest(unittest.TestCase):
         with urlopen(self.base + "/") as response:
             self.assertIn(b"Moraine beta", response.read())
 
+    def test_new_frontend_adapter_reads_public_store(self):
+        library = self.request("/api/dwell-v2/library")[1]
+        self.assertEqual(library["mode"], "moraine_beta_isolated")
+        self.assertEqual(library["memories"][0]["id"], "m1")
+        overview = self.request("/api/dwell-v2/overview")[1]
+        self.assertEqual(overview["counts"]["effective"], 1)
+        self.assertEqual(overview["counts"]["pending_candidates"], 1)
+        calendar = self.request("/api/dwell-v2/calendar?month=2026-01")[1]
+        self.assertEqual(calendar["events"][0]["open_id"], "m1")
+        self.assertEqual(self.request("/api/dwell-v2/relations")[1]["mode"], "moraine_beta_isolated")
+
+    def test_new_frontend_candidate_merge_requires_preview_confirmation(self):
+        second = self.request("/api/candidates", "POST", {
+            "title": "第二条", "content": "合成补充", "kind": "event",
+        })[1]
+        preview = self.request("/api/dwell-v2/actions/preview", "POST", {
+            "action": "candidate_merge", "candidate_ids": ["c1", second["id"]],
+            "master_id": "c1", "member_relations": {second["id"]: "supplement"},
+        })[1]
+        self.assertFalse(preview["persisted"])
+        self.assertEqual(self.request("/api/overview")[1]["active"], 1)
+        executed = self.request("/api/dwell-v2/actions/execute", "POST", {
+            "draft_id": preview["draft_id"], "confirmation_code": preview["confirmation_code"],
+        })[1]
+        self.assertEqual(set(executed["concluded_candidate_ids"]), {"c1", second["id"]})
+        self.assertEqual(self.request("/api/overview")[1]["active"], 2)
+
     def test_health_explains_that_authentication_is_required(self):
         status, health = self.request("/api/health", authenticated=False)
         self.assertEqual(status, 200)
