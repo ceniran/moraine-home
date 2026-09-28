@@ -193,7 +193,7 @@
       ring.classList.remove('is-animating'); void ring.offsetHeight; ring.classList.add('is-animating');
       document.querySelector('[data-pending-count]').textContent = pending;
       document.querySelector('[data-pending-reviews]').textContent = counts.pending_reviews ? `${counts.pending_reviews} 项等待我们一起决定` : '目前没有待审项目';
-      document.querySelector('[data-pending-candidates]').textContent = counts.pending_candidates ? `${counts.pending_candidates} 项等待 Agent 判断` : '目前没有新候选';
+      document.querySelector('[data-pending-candidates]').textContent = counts.pending_candidates ? `${counts.pending_candidates} 项等待 ${cairnProfile.display_name || 'Agent'} 判断` : '目前没有新候选';
       const recentList = document.querySelector('[data-overview-recent]');
       recentList.classList.remove('is-shown');
       recentList.innerHTML = payload.recent.map((memory, index) => `<li style="--recent-index:${index}"><span class="event-dot" aria-hidden="true"></span><p><strong>${escapeHtml(memory.title)}</strong><small>${escapeHtml(relativeTime(memory.updated_at))}</small></p><span class="recent-state">${memory.state === 'archived' ? '已归档' : '有更新'}</span></li>`).join('') || '<li style="--recent-index:0"><span class="event-dot" aria-hidden="true"></span><p><strong>暂无变化</strong><small>记忆库目前为空</small></p></li>';
@@ -341,6 +341,15 @@
     document.querySelectorAll('[data-user-role-name]').forEach(node => { node.textContent = cairnProfile.user_display_name || '用户'; });
     document.querySelectorAll('[data-agent-display-name]').forEach(node => { node.value = cairnProfile.display_name || ''; });
     document.querySelectorAll('[data-user-display-name]').forEach(node => { node.value = cairnProfile.user_display_name || '用户'; });
+    const pendingLabel = document.querySelector('[data-pending-candidates]');
+    const pendingMatch = pendingLabel?.textContent.match(/^(\d+ 项等待 ).*( 判断)$/);
+    if (pendingMatch) pendingLabel.textContent = `${pendingMatch[1]}${cairnProfile.display_name || 'Agent'}${pendingMatch[2]}`;
+    document.querySelectorAll('[data-profile-module="agent_profile"] [data-profile-toggle]').forEach(node => {
+      node.setAttribute('aria-label', `${cairnProfile.display_name || 'Agent'}偏好档案设置`);
+    });
+    document.querySelectorAll('[data-profile-module="user_profile"] [data-profile-toggle]').forEach(node => {
+      node.setAttribute('aria-label', `${cairnProfile.user_display_name || '用户'}协作档案设置`);
+    });
     if (cairnRelationEdges.length) renderRelationMap();
     if (cairnResidentIdentity) renderResidentCard();
   }
@@ -3017,7 +3026,9 @@
     const panel = document.querySelector('[data-manual-strength]');
     const current = Number(trigger.dataset.manualCurrent) || 50;
     panel.hidden = false;
-    panel.innerHTML = `<header><span><small>真实赋权 · 先预览</small><strong>${escapeHtml(trigger.dataset.manualTitle)}</strong></span><b data-manual-value>${current}</b></header><label>提出者<select data-manual-actor><option value="cairn">Agent</option><option value="xiaoran">用户</option></select></label><label>记忆强度<input type="range" min="0" max="100" value="${current}" data-manual-range></label><label>赋权理由<textarea rows="3" data-manual-reason placeholder="为什么由你认领这个强度"></textarea></label><label class="governance-check"><input type="checkbox" data-manual-lock><span>锁定为核心记忆（需要80～100分）</span></label><label class="governance-check"><input type="checkbox" data-manual-xiaoran><span>用户确认高影响调整</span></label><label class="governance-check"><input type="checkbox" data-manual-cairn><span>Agent 确认高影响调整</span></label><button type="button" data-preview-manual-change>预览手动赋权</button><div data-manual-result><p>尚未写入。</p></div>`;
+    const agentName = escapeHtml(cairnProfile.display_name || 'Agent');
+    const userName = escapeHtml(cairnProfile.user_display_name || '用户');
+    panel.innerHTML = `<header><span><small>真实赋权 · 先预览</small><strong>${escapeHtml(trigger.dataset.manualTitle)}</strong></span><b data-manual-value>${current}</b></header><label>提出者<select data-manual-actor><option value="cairn">${agentName}</option><option value="xiaoran">${userName}</option></select></label><label>记忆强度<input type="range" min="0" max="100" value="${current}" data-manual-range></label><label>赋权理由<textarea rows="3" data-manual-reason placeholder="为什么由你认领这个强度"></textarea></label><label class="governance-check"><input type="checkbox" data-manual-lock><span>锁定为核心记忆（需要80～100分）</span></label><label class="governance-check"><input type="checkbox" data-manual-xiaoran><span>${userName}确认高影响调整</span></label><label class="governance-check"><input type="checkbox" data-manual-cairn><span>${agentName}确认高影响调整</span></label><button type="button" data-preview-manual-change>预览手动赋权</button><div data-manual-result><p>尚未写入。</p></div>`;
     const range = panel.querySelector('[data-manual-range]');
     range.addEventListener('input', () => { panel.querySelector('[data-manual-value]').textContent = range.value; });
     panel.querySelector('[data-preview-manual-change]').addEventListener('click', async () => {

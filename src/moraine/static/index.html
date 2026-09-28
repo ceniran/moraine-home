@@ -498,7 +498,7 @@
         <details class="review-sources"><summary>查看逐句来源与机械删减</summary><div data-review-sources></div></details>
         <div class="signature-row">
           <section data-signature="xiaoran"><strong><i></i>所有者</strong><span>待确认</span><div><button type="button" data-sign="xiaoran" data-choice="approve">确认草稿</button><button type="button" data-sign="xiaoran" data-choice="keep">保持原状</button></div></section>
-          <section data-signature="cairn"><strong><i></i>Agent</strong><span>待确认</span><div><button type="button" data-sign="cairn" data-choice="approve">确认草稿</button><button type="button" data-sign="cairn" data-choice="keep">保持原状</button></div></section>
+          <section data-signature="cairn"><strong><i></i><span data-agent-role-name>Agent</span></strong><span>待确认</span><div><button type="button" data-sign="cairn" data-choice="approve">确认草稿</button><button type="button" data-sign="cairn" data-choice="keep">保持原状</button></div></section>
         </div>
         <p class="review-verdict" data-review-verdict>两把钥匙都转动后，才会生成执行计划。</p>
         <section class="execution-plan" data-execution-plan hidden><strong>安全执行计划</strong><ol><li>新增一条带全部来源的整合记忆</li><li>旧记录标记为“已汇入”，正文与历史继续保留</li><li>建立恢复入口，不立即永久删除任何内容</li></ol></section>
@@ -520,7 +520,7 @@
       </section>
       <section class="panel development-lines" aria-labelledby="developmentLinesTitle">
         <header><span><small>DEVELOPMENT LINES</small><h2 id="developmentLinesTitle">正在长向哪里</h2></span><b data-development-count>0 / 3</b></header>
-        <p>这是当前 Agent 自己愿意靠近的方向，会作为自主醒来时的一条轻量参考；不是任务、积分或进度条，也可以被忽略、暂停和改写。</p>
+        <p>这是当前 <span data-agent-role-name>Agent</span> 自己愿意靠近的方向，会作为自主醒来时的一条轻量参考；不是任务、积分或进度条，也可以被忽略、暂停和改写。</p>
         <div data-development-lines><div class="development-empty">正在读取发展线。</div></div>
       </section>
       <section class="study-keepsakes" aria-label="小机的四个私人收藏区域">
@@ -755,6 +755,6 @@
   <script src="./execution-plan.js?v=20260905-2"></script>
   <script src="./rehearsal-executor.js?v=20260904-1"></script>
   <script src="./relation-aware-draft.js?v=20260916-current-last1"></script>
-  <script src="./prototype.js?v=20260929-avatar-save-fields"></script>
+  <script src="./prototype.js?v=20260929-role-labels-complete"></script>
 </body>
 </html>
