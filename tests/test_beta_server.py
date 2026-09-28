@@ -117,6 +117,27 @@ class BetaServerTest(unittest.TestCase):
         })[1]["snapshot"]
         self.assertEqual(self.request("/api/dwell-v2/portability/snapshots")[1]["snapshots"][0]["id"], snapshot["id"])
         self.assertEqual(self.request("/api/dwell-v2/portability/export")[1]["schema"], 1)
+
+    def test_public_workbench_core_adapters(self):
+        self.assertEqual(self.request("/api/dwell-v2/queue")[1]["queue"]["deferred_source_ids"], [])
+        queue = self.request("/api/dwell-v2/queue", "POST", {
+            "action": "defer_source", "source_id": "m1"
+        })[1]["queue"]
+        self.assertEqual(queue["deferred_source_ids"], ["m1"])
+        self.assertIn("stages", self.request("/api/dwell-v2/flow")[1])
+        self.assertIn("clusters", self.request("/api/dwell-v2/clusters?offset=0")[1])
+        self.assertIn("candidates", self.request("/api/dwell-v2/replacements")[1])
+        self.assertIn("recycle", self.request("/api/dwell-v2/cleanup")[1])
+        self.assertIn("rollbacks", self.request("/api/dwell-v2/rollbacks")[1])
+
+        preview = self.request("/api/dwell-v2/actions/preview", "POST", {
+            "action": "content_revision", "memory_id": "m1", "title": "修订标题",
+            "content": "修订正文", "reason": "测试修订"
+        })[1]
+        executed = self.request("/api/dwell-v2/actions/execute", "POST", {
+            "draft_id": preview["draft_id"], "confirmation_code": preview["confirmation_code"]
+        })[1]
+        self.assertEqual(executed["result"]["title"], "修订标题")
     def test_candidate_admission_rollback_http_chain(self):
         memory = self.request("/api/candidates/admit", "POST", {"candidate_ids": ["c1"]})[1]
         result = self.request(f"/api/rollbacks/{memory['rollback']['id']}", "POST", {})[1]

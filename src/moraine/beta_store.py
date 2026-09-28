@@ -54,6 +54,7 @@ class BetaStore:
             "self_core_records": [],
             "user_profile_records": [],
             "profile_growth_candidates": [],
+            "workbench_queue": {"deferred_source_ids": [], "dismissed_pairs": []},
             "relations": [],
             "continuity_settings": {
                 "wakeup_enabled": False,
@@ -100,6 +101,7 @@ class BetaStore:
         payload.setdefault("self_core_records", [])
         payload.setdefault("user_profile_records", [])
         payload.setdefault("profile_growth_candidates", [])
+        payload.setdefault("workbench_queue", {"deferred_source_ids": [], "dismissed_pairs": []})
         payload.setdefault("relations", [])
         payload.setdefault("continuity_settings", {"wakeup_enabled": False, "adviser_enabled": False,
                                                     "max_choices": 3, "total_budget": 5000, "layer_budgets": {}})
@@ -117,6 +119,7 @@ class BetaStore:
                 or not isinstance(payload["continuity_settings"], dict)
                 or not isinstance(payload["profile_recall_policy"], dict)
                 or not isinstance(payload["profile_growth_candidates"], list)
+                or not isinstance(payload["workbench_queue"], dict)
                 or not isinstance(payload["settings"], dict) or not isinstance(payload["rollbacks"], list)):
             raise ValueError("profile and settings must be objects; relations must be a list")
         legacy_settings = payload["settings"]
@@ -128,6 +131,32 @@ class BetaStore:
             **({"updated_at": legacy_settings["updated_at"]} if legacy_settings.get("updated_at") else {}),
         }
         return payload
+
+    def workbench_queue(self) -> dict:
+        queue = deepcopy(self.snapshot()["workbench_queue"])
+        queue.setdefault("deferred_source_ids", [])
+        queue.setdefault("dismissed_pairs", [])
+        return queue
+
+    def update_workbench_queue(self, action: str, source_id: str, neighbor_id: str = "") -> dict:
+        if action not in {"defer_source", "restore_source", "dismiss_pair", "restore_pair"}:
+            raise ValueError("unsupported queue action")
+        source_id, neighbor_id = str(source_id).strip(), str(neighbor_id).strip()
+        if not source_id or action.endswith("pair") and not neighbor_id:
+            raise ValueError("queue action requires source ids")
+        pair = "::".join(sorted((source_id, neighbor_id))) if neighbor_id else ""
+        with self.lock:
+            data = self._read()
+            queue = data["workbench_queue"]
+            deferred = list(queue.get("deferred_source_ids") or [])
+            pairs = list(queue.get("dismissed_pairs") or [])
+            if action == "defer_source" and source_id not in deferred: deferred.append(source_id)
+            if action == "restore_source": deferred = [item for item in deferred if item != source_id]
+            if action == "dismiss_pair" and pair not in pairs: pairs.append(pair)
+            if action == "restore_pair": pairs = [item for item in pairs if item != pair]
+            queue.update({"deferred_source_ids": deferred[-200:], "dismissed_pairs": pairs[-1000:]})
+            self._save(data)
+            return deepcopy(queue)
 
     def profile_recall_policy(self) -> dict:
         policy = deepcopy(self.snapshot()["profile_recall_policy"])
@@ -820,6 +849,32 @@ class BetaStore:
             self._save(data)
             return deepcopy(row)
 
+    def merge_memories(self, memory_ids: list[str], *, title: str, content: str, reason: str) -> dict:
+        ids = list(dict.fromkeys(str(item) for item in memory_ids if str(item).strip()))
+        if len(ids) < 2 or not str(title).strip() or not str(content).strip() or not str(reason).strip():
+            raise ValueError("at least two memories, title, content and reason are required")
+        now = utc_now()
+        with self.lock:
+            data = self._read()
+            members = [row for row in data["memories"] if row.get("id") in ids and row.get("state", "active") == "active"]
+            if len(members) != len(ids):
+                raise ValueError("all merge members must be active")
+            memory_id = f"memory_{uuid.uuid4().hex[:12]}"
+            memory = {"id": memory_id, "title": str(title).strip()[:200], "content": str(content).strip()[:40000],
+                      "kind": members[0].get("kind", "event"), "tags": list(dict.fromkeys(
+                          tag for row in members for tag in row.get("tags") or []))[:20],
+                      "importance": max(float(row.get("importance", .5)) for row in members), "state": "active",
+                      "source_memory_ids": ids, "created_at": now, "updated_at": now,
+                      "occurred_at": min(str(row.get("occurred_at") or row.get("created_at") or now) for row in members),
+                      "versions": []}
+            data["memories"].append(memory)
+            for row in members:
+                row.update({"state": "archived", "merged_into": memory_id, "updated_at": now})
+            data["events"].append({"id": uuid.uuid4().hex, "type": "memories_merged", "at": now,
+                                   "target": memory_id, "sources": ids, "reason": str(reason)[:500]})
+            self._save(data)
+            return {"memory": deepcopy(memory), "archived_source_ids": ids}
+
     def replace_memory(self, old_id: str, new_id: str, reason: str) -> dict:
         reason = str(reason).strip()
         if not reason or old_id == new_id:
@@ -1052,6 +1107,10 @@ class BetaStore:
         if not isinstance(profile_recall_policy, dict):
             raise ValueError("profile_recall_policy must be an object")
         clean["profile_recall_policy"] = deepcopy(profile_recall_policy)
+        workbench_queue = payload.get("workbench_queue") or clean["workbench_queue"]
+        if not isinstance(workbench_queue, dict):
+            raise ValueError("workbench_queue must be an object")
+        clean["workbench_queue"] = deepcopy(workbench_queue)
         settings = payload.get("settings") or {"review_mode": "autonomous"}
         if (not isinstance(settings, dict)
                 or settings.get("review_mode", "autonomous") not in {"autonomous", "joint"}

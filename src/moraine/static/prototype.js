@@ -2595,7 +2595,7 @@
   });
 
   function showView(view) {
-    const next = ['cairn', 'activity', 'calendar', 'candidates', 'library', 'archive', 'workbench', 'study', 'review', 'settings'].includes(view) ? view : 'overview';
+    const next = ['calendar', 'candidates', 'library', 'archive', 'workbench', 'settings'].includes(view) ? view : 'overview';
     prototype.dataset.view = next;
     document.querySelectorAll('[data-view]').forEach((button) => {
       button.classList.toggle('is-current', button.dataset.view === next);
@@ -2762,19 +2762,6 @@
       centerWorkbenchTab(button);
     });
   });
-  fetch('/moraine-beta/api/dwell-v2/agent-workbench?manual=1&limit=20', { cache: 'no-store', headers: { Accept: 'application/json' } })
-    .then((response) => response.ok ? response.json() : Promise.reject(new Error(`request_${response.status}`)))
-    .then((payload) => {
-      const count = Math.max(0, Number(payload.review_todo_count) || 0);
-      document.querySelector('[data-study-review-count]').textContent = count;
-      document.querySelector('[data-study-review-note]').textContent = count
-        ? '自主醒来时会少量核对；它们不是必须立刻清空的任务。'
-        : '当前没有等待小机核对的整合记忆。';
-    })
-    .catch(() => {
-      document.querySelector('[data-study-review-count]').textContent = '—';
-      document.querySelector('[data-study-review-note]').textContent = '暂时无法读取审阅队列。';
-    });
   mergeStepTabs.forEach((button) => {
     button.addEventListener('click', () => {
       mergeStepTabs.forEach((candidate) => candidate.setAttribute('aria-selected', String(candidate === button)));
@@ -3540,19 +3527,6 @@
   loadRelationMap();
   loadLayeredRecall();
   loadSnapshots();
-  fetch('/moraine-beta/api/dwell-v2/development-lines', { cache: 'no-store', headers: { Accept: 'application/json' } })
-    .then(response => { if (!response.ok) throw new Error('development_lines_unavailable'); return response.json(); })
-    .then(payload => {
-      const lines = (payload.lines || []).filter(line => line.state === 'growing');
-      const echoes = payload.echoes || [];
-      document.querySelector('[data-development-count]').textContent = `${lines.length} / ${payload.active_limit || 3}`;
-      document.querySelector('[data-development-lines]').innerHTML = lines.length ? lines.map(line => {
-        const echo = [...echoes].reverse().find(item => item.line_id === line.id);
-        return `<article class="development-line"><strong>${escapeHtml(line.title)}</strong><p>${escapeHtml(line.why)}</p>${echo ? `<small>最近回声 · ${escapeHtml(echo.note)}</small>` : '<small>还没有行动回声</small>'}</article>`;
-      }).join('') : '<div class="development-empty">现在没有正在生长的发展线。空着也很好。</div>';
-    })
-    .catch(() => { document.querySelector('[data-development-lines]').innerHTML = '<div class="development-empty">暂时无法读取发展线，没有使用示例内容替代。</div>'; });
-  loadStudyDiary();
   requestAnimationFrame(() => moveArrangementPill(arrangementButtons[0], false));
   requestAnimationFrame(() => moveWorkbenchPill(workbenchTabs[0], false));
   requestAnimationFrame(() => moveOwnershipPill(ownershipTabs[0], false));

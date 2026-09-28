@@ -4,6 +4,7 @@ import json
 import hmac
 import mimetypes
 import os
+import re
 import secrets
 import urllib.parse
 import urllib.request
@@ -60,6 +61,50 @@ def create_beta_server(env: dict[str, str] | None = None):
             except Exception:
                 pass
         return {"mode": "keyword", "items": store.keyword_search(query, limit)}
+
+    def memory_terms(row: dict) -> set[str]:
+        text = " ".join((str(row.get("title") or ""), str(row.get("content") or ""),
+                         " ".join(str(tag) for tag in row.get("tags") or []))).casefold()
+        words = set(re.findall(r"[a-z0-9_]{2,}|[\u3400-\u9fff]{2,}", text))
+        compact = "".join(re.findall(r"[\u3400-\u9fff]", text))
+        words.update(compact[index:index + 2] for index in range(max(0, len(compact) - 1)))
+        return words
+
+    def memory_similarity(left: dict, right: dict) -> float:
+        a, b = memory_terms(left), memory_terms(right)
+        return len(a & b) / max(1, len(a | b))
+
+    def workbench_clusters(offset: int = 0, include_related: bool = False) -> dict:
+        rows = store.list_memories("active")
+        queue = store.workbench_queue()
+        dismissed = set(queue.get("dismissed_pairs") or [])
+        deferred = set(queue.get("deferred_source_ids") or [])
+        clusters = []
+        for source in rows:
+            if source.get("id") in deferred:
+                continue
+            neighbors = []
+            for other in rows:
+                if other.get("id") == source.get("id"):
+                    continue
+                pair = "::".join(sorted((str(source.get("id")), str(other.get("id")))))
+                if pair in dismissed:
+                    continue
+                score = memory_similarity(source, other)
+                threshold = 0.04 if include_related else 0.10
+                if score >= threshold:
+                    neighbors.append({**other, "similarity": round(score, 4),
+                                      "assessment": "possible_duplicate" if score >= .35 else "related_only"})
+            neighbors.sort(key=lambda row: row["similarity"], reverse=True)
+            if neighbors:
+                clusters.append({"source": {**source, "similarity": 1.0}, "neighbors": neighbors[:5]})
+        if not clusters:
+            return {"clusters": [], "persisted": False}
+        index = max(0, min(int(offset), len(clusters) - 1))
+        cluster = clusters[index]
+        cluster["selection"] = {"offset": index, "position": index + 1, "total": len(clusters),
+                                "has_next": index + 1 < len(clusters), "origin_source_id": cluster["source"]["id"]}
+        return {"clusters": [cluster], "persisted": False}
 
     class Handler(BaseHTTPRequestHandler):
         server_version = "MoraineBeta/0.1"
@@ -188,6 +233,35 @@ def create_beta_server(env: dict[str, str] | None = None):
                     return self._json(200, {"ok": True, "snapshots": store.list_snapshots()})
                 if parsed.path == "/api/dwell-v2/portability/export":
                     return self._json(200, store.snapshot())
+                if parsed.path == "/api/dwell-v2/queue":
+                    return self._json(200, {"ok": True, "queue": store.workbench_queue()})
+                if parsed.path == "/api/dwell-v2/clusters":
+                    return self._json(200, workbench_clusters(
+                        int(query.get("offset", [0])[0]), query.get("include_related", ["0"])[0] in {"1", "true"}))
+                if parsed.path == "/api/dwell-v2/replacements":
+                    candidates = []
+                    rows = store.list_memories("active")
+                    for index, old in enumerate(rows):
+                        for new in rows[index + 1:]:
+                            score = memory_similarity(old, new)
+                            if score < .12:
+                                continue
+                            candidates.append({"id": f"{old['id']}::{new['id']}", "old_memory": old,
+                                               "new_memory": new, "similarity": score, "gap_hours": 24})
+                    return self._json(200, {"candidates": candidates[:20], "persisted": False})
+                if parsed.path == "/api/dwell-v2/cleanup":
+                    return self._json(200, {"candidates": [], "near_duplicate_candidates": [],
+                                            "recycle": [row for row in store.list_memories("all")
+                                                        if row.get("state") == "archived"], "persisted": False})
+                if parsed.path == "/api/dwell-v2/rollbacks":
+                    rows = store.list_rollbacks()
+                    return self._json(200, {"rollbacks": [{**row, "memory_ids": [row["memory_id"]]} for row in rows]})
+                if parsed.path == "/api/dwell-v2/flow":
+                    return self._json(200, {"persisted": False, "writes": [], "stages": [
+                        {"key": "candidate", "number": "01", "title": "候选", "status": "可审阅", "summary": "事件先进入候选箱", "items": ["保留来源"]},
+                        {"key": "review", "number": "02", "title": "核对", "status": "人工判断", "summary": "检查边界与关系", "items": ["不自动裁决"]},
+                        {"key": "memory", "number": "03", "title": "记忆", "status": "可回退", "summary": "确认后进入记忆库", "items": ["保留历史"]},
+                    ]})
                 if parsed.path == "/api/dwell-v2/reflections":
                     return self._json(200, {"ok": True, "reflections": []})
                 if parsed.path == "/api/dwell-v2/candidates":
@@ -296,8 +370,38 @@ def create_beta_server(env: dict[str, str] | None = None):
                         rows, episode_id=episode_id, episode_complete=body.get("episode_complete") is True,
                         batch=True,
                     )})
+                if parsed.path == "/api/dwell-v2/queue":
+                    return self._json(200, {"ok": True, "queue": store.update_workbench_queue(
+                        str(body.get("action") or ""), str(body.get("source_id") or ""),
+                        str(body.get("neighbor_id") or ""))})
                 if parsed.path == "/api/dwell-v2/actions/preview":
-                    if body.get("action") != "candidate_merge":
+                    action = str(body.get("action") or "")
+                    if action in {"content_revision", "weight", "supersede", "restore_archive", "archive", "merge_many"}:
+                        draft_id = "draft_" + secrets.token_hex(8)
+                        confirmation_code = f"{secrets.randbelow(1000000):06d}"
+                        action_drafts[draft_id] = {"action": action, "body": body,
+                                                   "confirmation_code": confirmation_code}
+                        memory_id = str(body.get("memory_id") or body.get("old_memory_id") or body.get("old_id") or "")
+                        row = next((item for item in store.list_memories("all") if item.get("id") == memory_id), None)
+                        response = {"ok": True, "persisted": False, "draft_id": draft_id,
+                                    "confirmation_code": confirmation_code, "action": action,
+                                    "reason": str(body.get("reason") or ""), "before": row,
+                                    "after": {**(row or {}), "title": body.get("title", (row or {}).get("title")),
+                                              "content": body.get("content", (row or {}).get("content")),
+                                              "importance": body.get("importance", (row or {}).get("importance"))},
+                                    "changes": {"importance": body.get("importance")},
+                                    "writes": [memory_id] if memory_id else []}
+                        if action == "supersede":
+                            replacement_id = str(body.get("replacement_id") or body.get("new_memory_id") or "")
+                            response["replacement"] = next((item for item in store.list_memories("active")
+                                                              if item.get("id") == replacement_id), None)
+                        if action == "merge_many":
+                            members = [item for item in store.list_memories("active")
+                                       if item.get("id") in set(body.get("memory_ids") or [])]
+                            response.update({"target": {"title": body.get("result_title") or "整合记忆"},
+                                             "sources": members, "protected_source_ids": []})
+                        return self._json(200, response)
+                    if action != "candidate_merge":
                         return self._json(400, {"error": "unsupported_dwell_v2_action"})
                     candidate_ids = [str(value) for value in body.get("candidate_ids") or []]
                     master_id = str(body.get("master_id") or "")
@@ -333,6 +437,29 @@ def create_beta_server(env: dict[str, str] | None = None):
                         raise ValueError("draft_not_found")
                     if not hmac.compare_digest(str(body.get("confirmation_code") or ""), draft["confirmation_code"]):
                         raise ValueError("confirmation_code_mismatch")
+                    if draft.get("action"):
+                        payload, action = draft["body"], draft["action"]
+                        if action == "content_revision":
+                            result = store.revise_memory(str(payload.get("memory_id") or ""), title=payload.get("title"),
+                                                         content=payload.get("content"), reason=payload.get("reason"))
+                        elif action == "weight":
+                            result = store.set_importance(str(payload.get("memory_id") or ""), payload.get("importance"))
+                        elif action == "supersede":
+                            result = store.replace_memory(str(payload.get("old_memory_id") or payload.get("old_id") or payload.get("memory_id") or ""),
+                                                          str(payload.get("new_memory_id") or payload.get("replacement_id") or ""),
+                                                          str(payload.get("reason") or ""))
+                        elif action == "merge_many":
+                            result = store.merge_memories(list(payload.get("memory_ids") or []),
+                                                          title=str(payload.get("result_title") or payload.get("title") or "整合记忆"),
+                                                          content=str(payload.get("result_content") or payload.get("content") or "\n\n".join(
+                                                              row.get("content", "") for row in store.list_memories("active")
+                                                              if row.get("id") in set(payload.get("memory_ids") or []))),
+                                                          reason=str(payload.get("reason") or "人工确认整合"))
+                        elif action in {"restore_archive", "archive"}:
+                            result = store.set_archive(str(payload.get("memory_id") or ""), action == "archive")
+                        action_drafts.pop(draft_id, None)
+                        return self._json(200, {"ok": True, "action": action, "result": result,
+                                                **(result if isinstance(result, dict) else {})})
                     memory = store.admit(draft["candidate_ids"], draft["title"], draft["content"], draft["relations"])
                     action_drafts.pop(draft_id, None)
                     return self._json(200, {"ok": True, "memory": memory,
@@ -416,6 +543,8 @@ def create_beta_server(env: dict[str, str] | None = None):
                 if parsed.path == "/api/dwell-v2/portability/snapshots":
                     return self._json(201, {"ok": True, "snapshot": store.create_snapshot(
                         str(body.get("label") or "manual"))})
+                if parsed.path.startswith("/api/dwell-v2/rollbacks/"):
+                    return self._json(200, store.rollback_candidate_admission(parsed.path.rsplit("/", 1)[-1]))
                 if parsed.path == "/api/recall/layered":
                     return self._json(200, store.layered_context(str(body.get("query") or ""),
                                                                  bool(body.get("include_history", False)),
