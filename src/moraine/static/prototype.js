@@ -612,18 +612,21 @@
     }
   }
 
-  const layeredRecallLabels = {
-    self_core: ['身份核心', '始终在场'],
-    relations: ['关系', '按情境靠近'],
-    recent: ['近期记忆', '刚刚走过'],
-    long_term: ['长期记忆', '需要时回来']
-  };
-
   function renderLayeredRecall(payload) {
     const container = document.querySelector('[data-layered-recall]');
     const usage = document.querySelector('[data-layered-recall-usage]');
     if (!container) return;
     const layers = Array.isArray(payload.layers) ? payload.layers : [];
+    const agentName = String(payload.subjects?.agent || cairnProfile.display_name || 'Agent');
+    const userName = String(payload.subjects?.user || cairnProfile.user_display_name || '用户');
+    const layeredRecallLabels = {
+      self_core: [`${agentName}身份核心`, '始终在场'],
+      user_profile: [`${userName}协作画像`, '相关时进入'],
+      relations: ['关系记忆', '按情境靠近'],
+      recent: ['近期记忆', '刚刚走过'],
+      long_term: ['长期记忆', '需要时回来'],
+      history: ['历史记忆', '明确需要时查证']
+    };
     container.innerHTML = layers.map((layer, index) => {
       const [label, hint] = layeredRecallLabels[layer.name] || [layer.name, ''];
       return `<article class="recall-layer" data-recall-layer="${escapeHtml(layer.name)}" style="--layer-index:${index}">

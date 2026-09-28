@@ -536,8 +536,15 @@ class BetaStore:
             effective["self_core"] = 0
         if not policy["user_profile"].get("conversation_enabled"):
             effective["user_profile"] = 0
-        return build_layered_context(self.snapshot(), query=str(query), include_history=bool(include_history),
-                                     budgets=effective, total_budget=int(settings.get("total_budget", 5000)))
+        snapshot = self.snapshot()
+        context = build_layered_context(snapshot, query=str(query), include_history=bool(include_history),
+                                        budgets=effective, total_budget=int(settings.get("total_budget", 5000)))
+        profile = snapshot.get("profile") or {}
+        context["subjects"] = {
+            "agent": str(profile.get("display_name") or "Agent")[:120],
+            "user": str(profile.get("user_display_name") or "用户")[:120],
+        }
+        return context
 
     def wakeup_preview(self, signals: list[dict] | None = None, query: str = "", adviser_enabled: bool = False) -> dict:
         return build_wakeup_preview(self.snapshot(), signals=signals, query=str(query), adviser_enabled=bool(adviser_enabled))

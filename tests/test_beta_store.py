@@ -88,7 +88,10 @@ class BetaStoreTest(unittest.TestCase):
         store.upsert_self_core({"text": "我偏好先核对来源", "reason": "稳定选择", "source_ids": ["event-1"]})
         store.upsert_user_profile({"text": "用户喜欢简洁说明", "reason": "用户明确表达",
                                    "source_ids": ["event-2"], "category": "communication"})
-        layers = {row["name"]: row for row in store.layered_context()["layers"]}
+        store.update_profile({"display_name": "测试小机", "user_display_name": "测试用户"})
+        context = store.layered_context()
+        self.assertEqual(context["subjects"], {"agent": "测试小机", "user": "测试用户"})
+        layers = {row["name"]: row for row in context["layers"]}
         self.assertEqual(len(layers["self_core"]["items"]), 1)
         self.assertEqual(len(layers["user_profile"]["items"]), 1)
 
