@@ -313,7 +313,7 @@
   document.querySelector('[data-calendar-previous]')?.addEventListener('click', () => shiftCalendarMonth(-1));
   document.querySelector('[data-calendar-next]')?.addEventListener('click', () => shiftCalendarMonth(1));
 
-  let cairnProfile = { display_name: 'Moraine', avatar: '', status: '本地记忆实例', agent_type: 'Agent' };
+  let cairnProfile = { display_name: 'Agent', user_display_name: '用户', avatar: '', status: '本地记忆实例', agent_type: 'Agent' };
 
   function normalizeInstanceProfile(payload = {}) {
     const profile = payload.profile || payload || {};
@@ -321,6 +321,7 @@
       ...cairnProfile,
       ...profile,
       display_name: String(profile.display_name || cairnProfile.display_name || 'Moraine'),
+      user_display_name: String(profile.user_display_name || cairnProfile.user_display_name || '用户'),
       status: String(profile.status || profile.summary || cairnProfile.status || '本地记忆实例'),
       agent_type: String(profile.agent_type || profile.entity_type || 'Agent')
     };
@@ -336,6 +337,10 @@
     });
     document.querySelectorAll('[data-cairn-name-input]').forEach(node => { node.value = cairnProfile.display_name; });
     document.querySelectorAll('[data-cairn-status-input]').forEach(node => { node.value = cairnProfile.status; });
+    document.querySelectorAll('[data-agent-role-name]').forEach(node => { node.textContent = cairnProfile.display_name || 'Agent'; });
+    document.querySelectorAll('[data-user-role-name]').forEach(node => { node.textContent = cairnProfile.user_display_name || '用户'; });
+    document.querySelectorAll('[data-agent-display-name]').forEach(node => { node.value = cairnProfile.display_name || ''; });
+    document.querySelectorAll('[data-user-display-name]').forEach(node => { node.value = cairnProfile.user_display_name || '用户'; });
     if (cairnRelationEdges.length) renderRelationMap();
     if (cairnResidentIdentity) renderResidentCard();
   }
@@ -388,7 +393,8 @@
     if (!resident?.names?.display) {
       identity.innerHTML = '<p class="resident-card-empty">尚未形成可确认的居民身份资料。</p>';
     } else {
-      const names = [resident.names.display, resident.names.chinese, resident.names.nickname].filter(Boolean);
+      const names = [cairnProfile.display_name || resident.names.display, resident.names.chinese, resident.names.nickname]
+        .filter((name, index, values) => Boolean(name) && values.indexOf(name) === index);
       const selfCoreItems = (cairnSelfCore?.sections || []).flatMap(section => section.items || []);
       const summary = selfCoreItems[0]?.text || `${resident.existence} · ${resident.entity_type}`;
       const capabilities = resident.works_and_capabilities || [];
@@ -3222,6 +3228,17 @@
     } catch (error) {
       directProfileResult.textContent = error.message === 'avatar_too_large' ? '头像请不要超过 600KB' : '头像读取失败';
     } finally { directAvatarInput.value = ''; }
+  });
+  document.querySelector('[data-role-names-form]')?.addEventListener('submit', async event => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const result = form.querySelector('[data-role-names-result]');
+    const displayName = form.querySelector('[data-agent-display-name]').value.trim();
+    const userDisplayName = form.querySelector('[data-user-display-name]').value.trim() || '用户';
+    if (!displayName) { result.textContent = 'Agent 显示名不能为空。'; return; }
+    result.textContent = '正在保存……';
+    const saved = await saveDirectProfile({ display_name: displayName, user_display_name: userDisplayName }, '正在保存称呼……');
+    result.textContent = saved ? '已与个人空间和档案功能区同步。' : '保存失败，原称呼没有改变。';
   });
   document.querySelectorAll('[data-cairn-profile-form]').forEach(form => form.addEventListener('submit', async event => {
     event.preventDefault();

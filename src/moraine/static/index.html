@@ -9,7 +9,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <link rel="apple-touch-icon" sizes="180x180" href="./assets/moraine-apple-touch-icon.png?v=20260917-1">
   <title>Moraine · 记忆工作台</title>
-  <link rel="stylesheet" href="./prototype.css?v=20260925-self-core-card">
+  <link rel="stylesheet" href="./prototype.css?v=20260929-role-profile">
   <link rel="stylesheet" href="./auth.css?v=20260928-1">
   <script src="./auth.js?v=20260928-1"></script>
 </head>
@@ -636,15 +636,21 @@
           <span class="profile-policy-stage">可修订</span>
         </header>
         <p class="profile-policy-lead">开关描述生活里的作用，检索、相关性判断与上下文预算由系统负责。档案不是固定人格，也不会因一句随口话自动改变。</p>
+        <form class="profile-role-names" data-role-names-form>
+          <label><span>Agent 显示名</span><input type="text" maxlength="120" data-agent-display-name placeholder="与 self-core 居民证统一"></label>
+          <label><span>用户显示名</span><input type="text" maxlength="120" data-user-display-name placeholder="用户"></label>
+          <button type="submit">保存称呼</button>
+          <small data-role-names-result>用于个人空间与档案功能区；本地语义模型名称保持不变。</small>
+        </form>
         <article class="profile-policy-card" data-profile-module="agent_profile">
-          <header><span><strong>Agent 偏好档案</strong><small>Agent 的稳定偏好、边界与反复选择</small></span><i>我</i></header>
+          <header><span><strong><b data-agent-role-name>Agent</b> 偏好档案</strong><small><b data-agent-role-name>Agent</b> 的稳定偏好、边界与反复选择</small></span><i data-agent-role-name>Agent</i></header>
           <div class="candidate-retention-main"><span><strong>参与相关对话</strong><small data-profile-state="conversation">正在读取设置</small></span><button class="t-toggle" type="button" role="switch" aria-checked="false" data-on="false" data-profile-toggle="conversation" aria-label="让 Agent 偏好档案参与相关对话"><span class="t-toggle-thumb"></span></button></div>
           <div class="candidate-retention-main profile-injection-row"><span><strong>允许继续生长</strong><small data-profile-state="growth">只接收有来源的稳定候选</small></span><button class="t-toggle" type="button" role="switch" aria-checked="false" data-on="false" data-profile-toggle="growth" aria-label="允许 Agent 偏好档案继续生长"><span class="t-toggle-thumb"></span></button></div>
           <p class="profile-policy-last" data-profile-last>最近没有在对话中使用这个档案。</p>
           <div class="profile-growth-list" data-profile-growth-list></div>
         </article>
         <article class="profile-policy-card" data-profile-module="user_profile">
-          <header><span><strong>用户协作档案</strong><small>用户明确表达的偏好、边界与协作方式</small></span><i>用户</i></header>
+          <header><span><strong><b data-user-role-name>用户</b>协作档案</strong><small><b data-user-role-name>用户</b>明确表达的偏好、边界与协作方式</small></span><i data-user-role-name>用户</i></header>
           <div class="candidate-retention-main"><span><strong>参与相关对话</strong><small data-profile-state="conversation">正在读取设置</small></span><button class="t-toggle" type="button" role="switch" aria-checked="false" data-on="false" data-profile-toggle="conversation" aria-label="让用户协作档案参与相关对话"><span class="t-toggle-thumb"></span></button></div>
           <div class="candidate-retention-main profile-injection-row"><span><strong>允许继续生长</strong><small data-profile-state="growth">只接收用户明确表达的稳定候选</small></span><button class="t-toggle" type="button" role="switch" aria-checked="false" data-on="false" data-profile-toggle="growth" aria-label="允许用户协作档案继续生长"><span class="t-toggle-thumb"></span></button></div>
           <p class="profile-policy-last" data-profile-last>最近没有在对话中使用这个档案。</p>
@@ -749,6 +755,6 @@
   <script src="./execution-plan.js?v=20260905-2"></script>
   <script src="./rehearsal-executor.js?v=20260904-1"></script>
   <script src="./relation-aware-draft.js?v=20260916-current-last1"></script>
-  <script src="./prototype.js?v=20260929-profile-policy"></script>
+  <script src="./prototype.js?v=20260929-role-profile"></script>
 </body>
 </html>

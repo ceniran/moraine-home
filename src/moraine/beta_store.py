@@ -51,7 +51,7 @@ class BetaStore:
             "candidates": [],
             "events": [],
             "rollbacks": [],
-            "profile": {"display_name": "", "summary": "", "self_core": []},
+            "profile": {"display_name": "", "user_display_name": "用户", "summary": "", "avatar": "", "self_core": []},
             "self_core_records": [],
             "user_profile_records": [],
             "profile_growth_candidates": [],
@@ -98,7 +98,7 @@ class BetaStore:
             if not isinstance(payload.get(key), list):
                 raise ValueError(f"{key} must be a list")
         payload.setdefault("rollbacks", [])
-        payload.setdefault("profile", {"display_name": "", "summary": "", "self_core": []})
+        payload.setdefault("profile", {"display_name": "", "user_display_name": "用户", "summary": "", "avatar": "", "self_core": []})
         payload.setdefault("self_core_records", [])
         payload.setdefault("user_profile_records", [])
         payload.setdefault("profile_growth_candidates", [])
@@ -323,13 +323,22 @@ class BetaStore:
     def update_profile(self, value: dict) -> dict:
         if "self_core" in value:
             raise ValueError("profile.self_core is read-only legacy data; use /api/self-core with reason and source_ids")
-        display_name = str(value.get("display_name", "")).strip()[:120]
-        summary = str(value.get("summary", "")).strip()[:2000]
         now = utc_now()
         with self.lock:
             data = self._read()
-            legacy_self_core = list(data["profile"].get("self_core") or [])
-            data["profile"] = {"display_name": display_name, "summary": summary,
+            current = data["profile"]
+            display_name = str(value.get("display_name", current.get("display_name", ""))).strip()[:120]
+            user_display_name = str(value.get("user_display_name", current.get("user_display_name", "用户"))).strip()[:120] or "用户"
+            summary = str(value.get("summary", value.get("status", current.get("summary", "")))).strip()[:2000]
+            avatar = str(value.get("avatar", current.get("avatar", ""))).strip()
+            if avatar and not avatar.startswith(("data:image/png;base64,", "data:image/jpeg;base64,",
+                                                 "data:image/webp;base64,", "data:image/gif;base64,")):
+                raise ValueError("avatar must be a supported image data URL")
+            if len(avatar) > 900_000:
+                raise ValueError("avatar is too large")
+            legacy_self_core = list(current.get("self_core") or [])
+            data["profile"] = {"display_name": display_name, "user_display_name": user_display_name,
+                               "summary": summary, "avatar": avatar,
                                "self_core": legacy_self_core, "updated_at": now}
             data["events"].append({"id": uuid.uuid4().hex, "type": "profile_updated", "at": now, "target": "profile"})
             self._save(data)
