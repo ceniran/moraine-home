@@ -118,6 +118,19 @@ class BetaServerTest(unittest.TestCase):
         self.assertEqual(self.request("/api/dwell-v2/portability/snapshots")[1]["snapshots"][0]["id"], snapshot["id"])
         self.assertEqual(self.request("/api/dwell-v2/portability/export")[1]["schema"], 1)
 
+    def test_restored_frontend_sections_have_backend_contracts(self):
+        self.assertIn("items", self.request("/api/dwell-v2/activities?limit=20")[1])
+        self.assertEqual(self.request("/api/dwell-v2/diary")[1]["items"], [])
+        governance = self.request("/api/dwell-v2/governance?mode=simulate")[1]
+        self.assertEqual(governance["count"], 1)
+        self.assertFalse(governance["persisted"])
+        policy = self.request("/api/dwell-v2/identity-relation-routing-policy", "POST", {
+            "enabled": True, "retain_memory_copy": True
+        })[1]["policy"]
+        self.assertEqual(policy, {"enabled": True, "retain_memory_copy": True})
+        self.assertEqual(self.request("/api/dwell-v2/identity-relation-routing-policy")[1]["policy"], policy)
+        self.assertIn("configured", self.request("/api/dwell-v2/jev-settings")[1]["settings"])
+
     def test_public_workbench_core_adapters(self):
         self.assertEqual(self.request("/api/dwell-v2/queue")[1]["queue"]["deferred_source_ids"], [])
         queue = self.request("/api/dwell-v2/queue", "POST", {

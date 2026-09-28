@@ -128,6 +128,7 @@ class BetaStore:
             "candidate_retention_enabled": bool(legacy_settings.get("candidate_retention_enabled", False)),
             "candidate_retention_hours": int(legacy_settings.get("candidate_retention_hours", 168)),
             "identity_relation_routing": bool(legacy_settings.get("identity_relation_routing", False)),
+            "retain_identity_memory_copy": bool(legacy_settings.get("retain_identity_memory_copy", False)),
             **({"updated_at": legacy_settings["updated_at"]} if legacy_settings.get("updated_at") else {}),
         }
         return payload
@@ -291,6 +292,7 @@ class BetaStore:
             "candidate_retention_enabled": bool(current.get("candidate_retention_enabled", False)),
             "candidate_retention_hours": int(current.get("candidate_retention_hours", 168)),
             "identity_relation_routing": bool(current.get("identity_relation_routing", False)),
+            "retain_identity_memory_copy": bool(current.get("retain_identity_memory_copy", False)),
             **({"updated_at": current["updated_at"]} if current.get("updated_at") else {}),
         }
 
@@ -310,6 +312,7 @@ class BetaStore:
                 "candidate_retention_enabled": bool(value.get("candidate_retention_enabled", current.get("candidate_retention_enabled", False))),
                 "candidate_retention_hours": retention_hours,
                 "identity_relation_routing": bool(value.get("identity_relation_routing", current.get("identity_relation_routing", False))),
+                "retain_identity_memory_copy": bool(value.get("retain_identity_memory_copy", current.get("retain_identity_memory_copy", False))),
                 "updated_at": now,
             }
             data["events"].append({"id": uuid.uuid4().hex, "type": "settings_updated", "at": now, "target": "settings"})
@@ -1121,6 +1124,7 @@ class BetaStore:
             "candidate_retention_enabled": bool(settings.get("candidate_retention_enabled", False)),
             "candidate_retention_hours": int(settings.get("candidate_retention_hours", 168)),
             "identity_relation_routing": bool(settings.get("identity_relation_routing", False)),
+            "retain_identity_memory_copy": bool(settings.get("retain_identity_memory_copy", False)),
             **({"updated_at": settings["updated_at"]} if settings.get("updated_at") else {}),
         }
         with self.lock:

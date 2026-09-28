@@ -262,6 +262,45 @@ def create_beta_server(env: dict[str, str] | None = None):
                         {"key": "review", "number": "02", "title": "核对", "status": "人工判断", "summary": "检查边界与关系", "items": ["不自动裁决"]},
                         {"key": "memory", "number": "03", "title": "记忆", "status": "可回退", "summary": "确认后进入记忆库", "items": ["保留历史"]},
                     ]})
+                if parsed.path == "/api/dwell-v2/activities":
+                    limit = max(1, min(500, int(query.get("limit", [120])[0])))
+                    labels = {
+                        "candidate_added": "候选", "candidates_admitted": "记忆",
+                        "memory_revised": "修订", "memory_archived": "归档",
+                        "memory_restored": "恢复", "settings_updated": "设置",
+                    }
+                    items = []
+                    for event in reversed(store.list_events(limit)):
+                        kind = str(event.get("type") or "activity")
+                        items.append({"id": event.get("id"), "occurred_at": event.get("at"),
+                                      "kind": kind, "kind_label": labels.get(kind, "活动"),
+                                      "place": "Moraine", "summary": kind.replace("_", " "),
+                                      "visibility": "private"})
+                    return self._json(200, {"ok": True, "items": items})
+                if parsed.path == "/api/dwell-v2/diary":
+                    return self._json(200, {"ok": True, "items": []})
+                if parsed.path == "/api/dwell-v2/governance":
+                    rows = store.list_memories("active")
+                    bands = {"短暂": 0, "普通": 0, "稳定": 0, "重要": 0, "核心": 0}
+                    samples = []
+                    for row in rows:
+                        strength = round(float(row.get("importance", .5) or .5) * 100)
+                        band = "核心" if strength >= 90 else "重要" if strength >= 75 else "稳定" if strength >= 55 else "普通" if strength >= 30 else "短暂"
+                        bands[band] += 1
+                        samples.append({"id": row.get("id"), "title": row.get("title"),
+                                        "kind": row.get("kind", "event"), "current_strength": strength,
+                                        "suggested_strength": strength,
+                                        "requires_review": row.get("kind") in {"identity", "relationship"}})
+                    return self._json(200, {"count": len(rows), "current_distribution": bands,
+                                            "suggested_distribution": dict(bands), "samples": samples[:12],
+                                            "persisted": False})
+                if parsed.path == "/api/dwell-v2/identity-relation-routing-policy":
+                    settings = store.settings()
+                    return self._json(200, {"ok": True, "policy": {
+                        "enabled": settings.get("identity_relation_routing", False),
+                        "retain_memory_copy": settings.get("retain_identity_memory_copy", False)}})
+                if parsed.path == "/api/dwell-v2/jev-settings":
+                    return self._json(200, {"ok": True, "settings": adviser.public()})
                 if parsed.path == "/api/dwell-v2/reflections":
                     return self._json(200, {"ok": True, "reflections": []})
                 if parsed.path == "/api/dwell-v2/candidates":
@@ -538,6 +577,18 @@ def create_beta_server(env: dict[str, str] | None = None):
                     return self._json(200, {"ok": True, "policy": {
                         "enabled": updated["candidate_retention_enabled"],
                         "retention_hours": updated["candidate_retention_hours"]}})
+                if parsed.path == "/api/dwell-v2/identity-relation-routing-policy":
+                    current = store.settings()
+                    updated = store.update_settings({
+                        **current,
+                        "identity_relation_routing": bool(body.get("enabled", current.get("identity_relation_routing", False))),
+                        "retain_identity_memory_copy": bool(body.get("retain_memory_copy", current.get("retain_identity_memory_copy", False))),
+                    })
+                    return self._json(200, {"ok": True, "policy": {
+                        "enabled": updated.get("identity_relation_routing", False),
+                        "retain_memory_copy": updated.get("retain_identity_memory_copy", False)}})
+                if parsed.path == "/api/dwell-v2/jev-settings":
+                    return self._json(200, {"ok": True, "settings": adviser.update(body)})
                 if parsed.path == "/api/dwell-v2/candidate-shred/run":
                     return self._json(200, store.shred_eligible_candidates())
                 if parsed.path == "/api/dwell-v2/portability/snapshots":

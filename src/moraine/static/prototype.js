@@ -3422,10 +3422,10 @@
   };
   const loadStudyDiary = async () => {
     try {
-      const response = await fetch('/moraine-beta/api/dwell-v2-unavailable', { cache: 'no-store', headers: { Accept: 'application/json' } });
+      const response = await fetch('/moraine-beta/api/dwell-v2/diary', { cache: 'no-store', headers: { Accept: 'application/json' } });
       if (!response.ok) throw new Error(`diary_${response.status}`);
       const payload = await response.json();
-      studyDiaries = (Array.isArray(payload) ? payload : [])
+      studyDiaries = (Array.isArray(payload) ? payload : (payload.items || []))
         .filter(entry => entry && (entry.author === 'claude' || entry.author === 'shared'))
         .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
       studyDiaryIndex = 0;
