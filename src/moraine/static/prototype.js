@@ -3309,7 +3309,7 @@
   const snapshotResult = document.querySelector('[data-snapshot-result]');
   const renderSnapshots = snapshots => {
     snapshotList.innerHTML = snapshots.length ? snapshots.map(snapshot => `<article class="snapshot-card">
-      <span><strong>${escapeHtml(snapshot.label)}</strong><small>${escapeHtml(new Date(snapshot.created_at).toLocaleString('zh-CN'))} · ${snapshot.count} 条 · ${(snapshot.bytes / 1024).toFixed(1)}KB</small></span>
+      <span><strong>${escapeHtml(snapshot.label)}</strong><small>${escapeHtml(new Date(snapshot.created_at).toLocaleString('zh-CN'))} · ${Number(snapshot.memories || 0)} 条记忆 · ${Number(snapshot.candidates || 0)} 条候选</small></span>
       <div data-snapshot-impact="${escapeHtml(snapshot.id)}"></div></article>`).join('') : '<p>还没有私有快照。</p>';
   };
   const loadSnapshots = async () => {
