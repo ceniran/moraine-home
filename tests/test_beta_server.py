@@ -201,6 +201,14 @@ class BetaServerTest(unittest.TestCase):
         library = self.request("/api/dwell-v2/library")[1]
         self.assertEqual(library["mode"], "moraine_beta_isolated")
         self.assertEqual(library["memories"][0]["id"], "m1")
+
+    def test_personal_space_is_visible_and_routable(self):
+        index = (Path(__file__).parents[1] / "src" / "moraine" / "static" / "index.html").read_text(encoding="utf-8")
+        script = (Path(__file__).parents[1] / "src" / "moraine" / "static" / "prototype.js").read_text(encoding="utf-8")
+        self.assertIn('class="cairn-entry" type="button" data-view="cairn" aria-label="进入实例空间">', index)
+        self.assertIn("['cairn', 'calendar', 'candidates'", script)
+
+    def test_dwell_v2_read_only_adapter_contracts(self):
         overview = self.request("/api/dwell-v2/overview")[1]
         self.assertEqual(overview["counts"]["effective"], 1)
         self.assertEqual(overview["counts"]["pending_candidates"], 1)

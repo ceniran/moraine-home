@@ -2595,7 +2595,7 @@
   });
 
   function showView(view) {
-    const next = ['calendar', 'candidates', 'library', 'archive', 'workbench', 'settings'].includes(view) ? view : 'overview';
+    const next = ['cairn', 'calendar', 'candidates', 'library', 'archive', 'workbench', 'settings'].includes(view) ? view : 'overview';
     prototype.dataset.view = next;
     document.querySelectorAll('[data-view]').forEach((button) => {
       button.classList.toggle('is-current', button.dataset.view === next);
