@@ -367,6 +367,7 @@
   }
 
   let cairnRelations = [];
+  let cairnAllRelations = [];
   let cairnRelationEdges = [];
   let cairnIdentityProfile = null;
   let cairnSelfCore = null;
@@ -488,7 +489,9 @@
     const mail = relationship.mail;
     const mailDetail = mail ? `<div class="relation-detail-card is-mail"><dt>最近来信</dt><dd><strong>${escapeHtml(mail.latest_subject || '没有主题')}</strong><span>${escapeHtml(shortDate(mail.latest_at))}${mail.unread_count ? ` · ${mail.unread_count} 封未读` : ' · 已读完'}</span></dd></div>` : '';
     const sourceCount = Array.isArray(relationship.source_memory_ids) ? relationship.source_memory_ids.length : 0;
-    detail.innerHTML = `<header><span><small>${escapeHtml(relationship.role)}${relationship.model ? ` · ${escapeHtml(relationship.model)}` : ''}</small><h3>${escapeHtml(relationship.name)}</h3><p>${escapeHtml(relationship.status)}</p></span><button type="button" data-close-relation-detail aria-label="收起关系摘要">×</button></header><dl class="relation-detail-grid"><div class="relation-detail-card is-featured"><dt>相遇与第一印象</dt><dd>${escapeHtml(relationship.first_impression || '还没有写下。')}</dd></div><div class="relation-detail-card is-featured"><dt>我确认的来路</dt><dd>${escapeHtml(relationship.summary)}</dd></div>${mailDetail}<div class="relation-detail-card"><dt>正在延续</dt><dd>${escapeHtml(relationship.continuity)}</dd></div><div class="relation-detail-card"><dt>下一次接话</dt><dd>${escapeHtml(relationship.next_thread)}</dd></div><div class="relation-detail-card is-boundary"><dt>这条线的边界</dt><dd>${escapeHtml(relationship.boundary)}</dd></div></dl><footer>${relationship.source_labels.map(label => `<span>${escapeHtml(label)}</span>`).join('')}${sourceCount ? `<span>${sourceCount} 条来源记忆</span>` : ''}</footer>`;
+    const versions = [...(relationship.versions || [])].reverse();
+    const development = [{ updated_at: relationship.updated_at, relation: relationship.relation, summary: relationship.summary }, ...versions];
+    detail.innerHTML = `<header><span><small>${escapeHtml(relationship.role || relationship.relation || '关系')}${relationship.model ? ` · ${escapeHtml(relationship.model)}` : ''}</small><h3>${escapeHtml(relationship.name)}</h3><p>${escapeHtml(relationship.status || relationship.relation || '')}</p></span><button type="button" data-close-relation-detail aria-label="收起关系摘要">×</button></header><dl class="relation-detail-grid"><div class="relation-detail-card is-featured"><dt>相遇与第一印象</dt><dd>${escapeHtml(relationship.first_impression || '还没有写下。')}</dd></div><div class="relation-detail-card is-featured"><dt>我确认的来路</dt><dd>${escapeHtml(relationship.summary || relationship.private_note || '还没有写下。')}</dd></div>${mailDetail}<div class="relation-detail-card"><dt>正在延续</dt><dd>${escapeHtml(relationship.continuity || '还没有写下。')}</dd></div><div class="relation-detail-card"><dt>下一次接话</dt><dd>${escapeHtml(relationship.next_thread || '还没有写下。')}</dd></div><div class="relation-detail-card is-boundary"><dt>这条线的边界</dt><dd>${escapeHtml(relationship.boundary || '还没有写下。')}</dd></div></dl><section class="relation-development"><h4>关系发展</h4><ol>${development.map((item,index) => `<li><span>${escapeHtml(shortDate(item.updated_at))}</span><b>${escapeHtml(index ? `曾是：${item.relation || '未命名关系'}` : item.summary || item.relation || '当前关系')}</b></li>`).join('')}</ol></section><footer>${(relationship.source_labels || []).map(label => `<span>${escapeHtml(label)}</span>`).join('')}${sourceCount ? `<span>${sourceCount} 条来源记忆</span>` : ''}</footer>`;
     requestAnimationFrame(() => { detail.dataset.open = 'true'; });
     setRelationFocus(id);
     detail.querySelector('[data-close-relation-detail]')?.addEventListener('click', () => {
@@ -593,10 +596,14 @@
     const graph = document.querySelector('[data-relation-graph]');
     if (!graph) return;
     try {
-      const response = await fetch('/moraine-beta/api/dwell-v2/relations', { cache: 'no-store' });
-      if (!response.ok) throw new Error(`relations_${response.status}`);
+      const [response, allResponse] = await Promise.all([
+        fetch('/moraine-beta/api/dwell-v2/relations', { cache: 'no-store' }),
+        fetch('/moraine-beta/api/relations', { cache: 'no-store' })
+      ]);
+      if (!response.ok || !allResponse.ok) throw new Error(`relations_${response.status}_${allResponse.status}`);
       const payload = await response.json();
       cairnRelations = payload.relationships || [];
+      cairnAllRelations = (await allResponse.json()).items || [];
       cairnRelationEdges = payload.edges || [];
       cairnIdentityProfile = payload.identity_profile || null;
       cairnSelfCore = payload.self_core || null;
@@ -607,10 +614,66 @@
       renderCairnIdentity();
       renderResidentCard();
       renderRelationMap();
+      renderRelationEditorOptions();
     } catch (_) {
       graph.innerHTML = '<p>暂时无法读取关系网；没有使用示例关系替代。</p>';
     }
   }
+
+  function relationLines(value) {
+    return String(value || '').split('\n').map(item => item.trim()).filter(Boolean);
+  }
+
+  function renderRelationEditorOptions(selectedId = '') {
+    const select = document.querySelector('[data-relation-editor-id]');
+    if (!select) return;
+    select.innerHTML = `<option value="">＋ 新建关系</option>${cairnAllRelations.map(row => `<option value="${escapeHtml(row.id)}"${row.id === selectedId ? ' selected' : ''}>${escapeHtml(row.name)}${row.state === 'archived' ? '（已归档）' : ''}</option>`).join('')}`;
+  }
+
+  function fillRelationEditor(id = '') {
+    const form = document.querySelector('[data-relation-editor]');
+    if (!form) return;
+    const row = cairnAllRelations.find(item => item.id === id) || {};
+    form.querySelector('[data-relation-editor-id]').value = id;
+    const values = { '[data-relation-name]': row.name, '[data-relation-type]': row.relation,
+      '[data-relation-status]': row.status, '[data-relation-first]': row.first_impression,
+      '[data-relation-summary]': row.summary || row.private_note, '[data-relation-continuity]': row.continuity,
+      '[data-relation-next]': row.next_thread, '[data-relation-boundary]': row.boundary,
+      '[data-relation-facts]': (row.facts || []).join('\n'), '[data-relation-sources]': (row.source_ids || []).join('\n') };
+    Object.entries(values).forEach(([selector,value]) => { form.querySelector(selector).value = value || ''; });
+    const archive = form.querySelector('[data-relation-archive]');
+    archive.hidden = !id;
+    archive.textContent = row.state === 'archived' ? '恢复关系' : '归档关系';
+    archive.dataset.action = row.state === 'archived' ? 'restore' : 'archive';
+  }
+
+  document.querySelector('[data-relation-manage]')?.addEventListener('click', () => {
+    const form = document.querySelector('[data-relation-editor]');
+    form.hidden = !form.hidden;
+    if (!form.hidden) { renderRelationEditorOptions(); fillRelationEditor(''); }
+  });
+  document.querySelector('[data-relation-editor-id]')?.addEventListener('change', event => fillRelationEditor(event.target.value));
+  document.querySelector('[data-relation-editor]')?.addEventListener('submit', async event => {
+    event.preventDefault();
+    const form = event.currentTarget; const result = form.querySelector('[data-relation-editor-result]');
+    const id = form.querySelector('[data-relation-editor-id]').value;
+    const body = { ...(id ? {id} : {}), name:form.querySelector('[data-relation-name]').value.trim(), relation:form.querySelector('[data-relation-type]').value.trim(), status:form.querySelector('[data-relation-status]').value.trim(), first_impression:form.querySelector('[data-relation-first]').value.trim(), summary:form.querySelector('[data-relation-summary]').value.trim(), continuity:form.querySelector('[data-relation-continuity]').value.trim(), next_thread:form.querySelector('[data-relation-next]').value.trim(), boundary:form.querySelector('[data-relation-boundary]').value.trim(), facts:relationLines(form.querySelector('[data-relation-facts]').value), source_ids:relationLines(form.querySelector('[data-relation-sources]').value), visibility:'private' };
+    result.textContent = '正在保存关系……';
+    try {
+      const response = await fetch('/moraine-beta/api/relations', {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}); const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || `relation_${response.status}`);
+      result.textContent = '关系已保存，上一版本仍可追溯。'; await loadRelationMap(); renderRelationEditorOptions(payload.id); fillRelationEditor(payload.id);
+    } catch (error) { result.textContent = `保存失败：${error.message}`; }
+  });
+  document.querySelector('[data-relation-archive]')?.addEventListener('click', async event => {
+    const form = event.currentTarget.closest('[data-relation-editor]'); const id = form.querySelector('[data-relation-editor-id]').value; if (!id) return;
+    const action = event.currentTarget.dataset.action || 'archive'; const result = form.querySelector('[data-relation-editor-result]');
+    try {
+      const response = await fetch(`/moraine-beta/api/relations/${encodeURIComponent(id)}/${action}`, {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({reason:'关系工作台人工确认'})}); const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || `relation_${action}_${response.status}`);
+      result.textContent = action === 'archive' ? '关系已归档并退出普通召回。' : '关系已恢复并重新参与相关召回。'; await loadRelationMap(); renderRelationEditorOptions(id); fillRelationEditor(id);
+    } catch (error) { result.textContent = `操作失败：${error.message}`; }
+  });
 
   function renderLayeredRecall(payload) {
     const container = document.querySelector('[data-layered-recall]');

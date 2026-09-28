@@ -209,8 +209,18 @@ def create_beta_server(env: dict[str, str] | None = None):
                                             "events": events, "undated_count": undated})
                 if parsed.path == "/api/dwell-v2/relations":
                     profile = store.profile()
+                    relationships = store.list_relations("active")
+                    edges = [{"from": "cairn", "to": row.get("id"), "direction": "both"}
+                             for row in relationships if row.get("id")]
+                    for row in relationships:
+                        row["role"] = row.get("relation", "")
+                        row["model"] = row.get("model", "")
+                        row["status"] = row.get("status") or row.get("relation", "")
+                        row["summary"] = row.get("summary") or row.get("private_note", "")
+                        row["source_memory_ids"] = list(row.get("source_ids") or [])
+                        row["source_labels"] = [str(item) for item in row.get("source_ids") or []]
                     return self._json(200, {"ok": True, "mode": "moraine_beta_isolated",
-                                            "relationships": store.list_relations(), "edges": [],
+                                            "relationships": relationships, "edges": edges,
                                             "identity_profile": profile, "resident_identity": profile,
                                             "self_core": {"items": store.list_self_core("active")},
                                             "user_profile": {"items": store.list_user_profile("active")},
@@ -369,7 +379,7 @@ def create_beta_server(env: dict[str, str] | None = None):
                 if parsed.path == "/api/user-profile":
                     return self._json(200, {"items": store.list_user_profile(query.get("state", ["active"])[0])})
                 if parsed.path == "/api/relations":
-                    return self._json(200, {"items": store.list_relations()})
+                    return self._json(200, {"items": store.list_relations(query.get("state", ["all"])[0])})
                 if parsed.path == "/api/continuity/settings":
                     return self._json(200, store.continuity_settings())
                 if parsed.path == "/api/recall/layered":
@@ -584,6 +594,11 @@ def create_beta_server(env: dict[str, str] | None = None):
                                                                                str(body.get("reason") or "")))
                 if parsed.path == "/api/relations":
                     return self._json(200, store.upsert_relation(body))
+                if parsed.path.startswith("/api/relations/"):
+                    parts = parsed.path.split("/")
+                    if len(parts) == 5 and parts[4] in {"archive", "restore"}:
+                        return self._json(200, store.set_relation_archived(parts[3], parts[4] == "archive",
+                                                                           str(body.get("reason") or "")))
                 if parsed.path == "/api/continuity/settings":
                     return self._json(200, store.update_continuity_settings(body))
                 if parsed.path == "/api/dwell-v2/profile-recall-policy":

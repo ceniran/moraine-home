@@ -77,7 +77,22 @@
         <small class="cairn-direct-result resident-card-result" data-cairn-direct-result aria-live="polite">点击头像可由人类自定义</small>
       </section>
       <section class="panel relation-map" aria-labelledby="relationMapTitle">
-        <header><span><small>PRIVATE RELATION MAP</small><h2 id="relationMapTitle">关系星图</h2><p>从真实往来长出的关系，而不是一张亲密度排行榜。</p></span><b>私密</b></header>
+        <header><span><small>PRIVATE RELATION MAP</small><h2 id="relationMapTitle">关系星图</h2><p>从真实往来长出的关系，而不是一张亲密度排行榜。</p></span><button type="button" data-relation-manage>管理关系</button></header>
+        <form class="relation-editor" data-relation-editor hidden>
+          <label>关系节点<select data-relation-editor-id><option value="">＋ 新建关系</option></select></label>
+          <label>名称<input required maxlength="120" data-relation-name></label>
+          <label>关系类型<input required maxlength="120" data-relation-type placeholder="例如：朋友、协作者"></label>
+          <label>当前状态<input maxlength="500" data-relation-status></label>
+          <label>相遇与第一印象<textarea rows="2" data-relation-first></textarea></label>
+          <label>我确认的来路<textarea rows="3" data-relation-summary></textarea></label>
+          <label>正在延续<textarea rows="2" data-relation-continuity></textarea></label>
+          <label>下一次接话<textarea rows="2" data-relation-next></textarea></label>
+          <label>关系边界<textarea rows="2" data-relation-boundary></textarea></label>
+          <label>事实（每行一条）<textarea rows="3" data-relation-facts></textarea></label>
+          <label>来源 ID（每行一条）<textarea rows="2" data-relation-sources></textarea></label>
+          <div><button type="button" data-relation-archive hidden>归档关系</button><button type="submit">保存关系</button></div>
+          <small data-relation-editor-result>修订会保留上一版本；归档后退出普通关系召回。</small>
+        </form>
         <div class="relation-graph" data-relation-graph><p>正在读取关系网……</p></div>
         <section class="relation-detail t-panel-slide" data-relation-detail data-open="false" hidden aria-live="polite"></section>
         <p class="relation-map-note">点一个名字，只看我们之间的来路。节点不替对方定义关系；私人来信正文与未确认推测不会出现在图里。</p>
@@ -755,6 +770,6 @@
   <script src="./execution-plan.js?v=20260905-2"></script>
   <script src="./rehearsal-executor.js?v=20260904-1"></script>
   <script src="./relation-aware-draft.js?v=20260916-current-last1"></script>
-  <script src="./prototype.js?v=20260929-recall-subjects"></script>
+  <script src="./prototype.js?v=20260929-relation-loop"></script>
 </body>
 </html>

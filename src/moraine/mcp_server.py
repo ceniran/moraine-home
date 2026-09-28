@@ -315,14 +315,23 @@ def create_mcp(client: MoraineClient) -> FastMCP:
     @server.tool(annotations=reversible_write)
     def relation_upsert(name: str, relation: str, facts: list[str] | None = None, source_ids: list[str] | None = None,
                         private_note: str = "", note: str = "", visibility: str = "private",
-                        relation_id: str | None = None) -> dict:
+                        relation_id: str | None = None, status: str = "", first_impression: str = "",
+                        summary: str = "", continuity: str = "", next_thread: str = "", boundary: str = "") -> dict:
         """Create or update a relationship node. Record attributable relationship facts; do not infer mutual status from message frequency or similarity alone."""
         payload: dict[str, Any] = {"name": name, "relation": relation, "facts": facts or [],
                                   "source_ids": source_ids or [], "private_note": private_note or note,
-                                  "visibility": visibility}
+                                  "visibility": visibility, "status": status, "first_impression": first_impression,
+                                  "summary": summary, "continuity": continuity,
+                                  "next_thread": next_thread, "boundary": boundary}
         if relation_id:
             payload["id"] = relation_id
         return client.request("/api/relations", "POST", payload)
+
+    @server.tool(annotations=reversible_write)
+    def relation_set_archived(relation_id: str, archived: bool, reason: str) -> dict:
+        """Reversibly archive or restore a relationship node; archived nodes leave normal relation recall."""
+        action = "archive" if archived else "restore"
+        return client.request(f"/api/relations/{urllib.parse.quote(relation_id, safe='')}/{action}", "POST", {"reason": reason})
 
     @server.tool(annotations=read_only)
     def layered_recall(query: str = "", include_history: bool = False) -> dict:

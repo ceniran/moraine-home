@@ -1673,6 +1673,19 @@ h1, h2, p { margin-top: 0; }
 .user-profile-list article > footer i { padding:3px 6px; border-radius:999px; background:rgba(141,133,146,.08); color:#817985; font-size:7px; font-style:normal; }
 .resident-card-empty,.resident-card-loading { margin:24px 0; color:var(--muted); font-size:10px; text-align:center; }
 .resident-card-result { display:block; margin:7px 7px 0; color:var(--muted); font-size:8px; }
+.relation-editor { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; margin:13px 0; padding:13px; border:1px solid rgba(116,130,121,.18); border-radius:14px; background:rgba(255,255,255,.48); }
+.relation-editor[hidden] { display:none; }
+.relation-editor label { display:grid; gap:5px; color:var(--muted); font-size:8px; }
+.relation-editor label:nth-of-type(n+5) { grid-column:1 / -1; }
+.relation-editor input,.relation-editor select,.relation-editor textarea { width:100%; padding:8px 9px; border:1px solid rgba(116,130,121,.2); border-radius:8px; color:var(--ink); background:rgba(255,255,255,.75); font:inherit; font-size:9px; resize:vertical; }
+.relation-editor > div { grid-column:1 / -1; display:flex; justify-content:flex-end; gap:8px; }
+.relation-editor button,.relation-map > header > button { padding:7px 10px; border:1px solid rgba(116,130,121,.2); border-radius:999px; color:#657269; background:rgba(249,251,248,.88); font-size:8px; }
+.relation-editor > small { grid-column:1 / -1; color:var(--muted); font-size:8px; }
+.relation-development { margin-top:13px; padding-top:11px; border-top:1px solid rgba(116,130,121,.18); }
+.relation-development h4 { margin:0 0 8px; font-size:10px; }
+.relation-development ol { display:grid; gap:7px; margin:0; padding:0; list-style:none; }
+.relation-development li { display:grid; grid-template-columns:auto 1fr; gap:8px; color:var(--muted); font-size:8px; }
+.relation-development li b { color:var(--ink); font-weight:600; }
 @media (max-width:430px) {
   .resident-card-face { padding:16px; border-radius:18px; }
   .resident-id-main { grid-template-columns:minmax(0,1fr) 78px; gap:12px; }
@@ -2140,6 +2153,8 @@ h1, h2, p { margin-top: 0; }
 .archive-memory { border-radius: 15px; }
 .archive-memory p { line-height: 1.75; }
 @media (max-width: 430px) {
+  .relation-editor { grid-template-columns:1fr; }
+  .relation-editor label { grid-column:1 !important; }
   .profile-role-names { grid-template-columns: 1fr; }
   .profile-role-names > small { grid-column: 1; }
   .association-box-header { align-items: stretch; flex-direction: column; }

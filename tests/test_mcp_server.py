@@ -63,7 +63,7 @@ class McpToolsTest(unittest.IsolatedAsyncioTestCase):
                         "event_list", "calendar_list", "profile_get", "profile_update",
                         "self_core_list", "self_core_upsert", "self_core_set_archived",
                         "user_profile_list", "user_profile_upsert", "user_profile_set_archived",
-                        "relation_list", "relation_upsert", "layered_recall", "wakeup_preview",
+                        "relation_list", "relation_upsert", "relation_set_archived", "layered_recall", "wakeup_preview",
                         "continuity_settings_get", "continuity_settings_update", "settings_get", "settings_update",
                         "snapshot_list", "snapshot_create", "snapshot_restore",
                         "store_export", "store_import",

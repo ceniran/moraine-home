@@ -170,7 +170,11 @@ class BetaStoreTest(unittest.TestCase):
             "display_name": "测试小机",
             "summary": "只使用合成资料",
         })
-        relation = store.upsert_relation({"name": "测试同行者", "relation": "协作者", "note": "合成关系"})
+        relation = store.upsert_relation({"name": "测试同行者", "relation": "协作者", "note": "合成关系",
+                                          "summary": "共同测试", "continuity": "继续核对",
+                                          "source_ids": ["source-relation"]})
+        revised_relation = store.upsert_relation({"id": relation["id"], "name": "测试同行者",
+                                                   "relation": "长期协作者", "summary": "形成稳定协作"})
         user_profile = store.upsert_user_profile({"subject": "测试同行者", "category": "preference",
                                                   "text": "喜欢先看结论", "reason": "合成确认",
                                                   "source_ids": ["source-profile"]})
@@ -179,6 +183,12 @@ class BetaStoreTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "legacy"):
             store.update_profile({"display_name": "测试小机", "summary": "合成资料", "self_core": ["无出处身份"]})
         self.assertEqual(store.list_relations()[0]["id"], relation["id"])
+        self.assertEqual(len(revised_relation["versions"]), 1)
+        self.assertEqual(revised_relation["source_ids"], ["source-relation"])
+        store.set_relation_archived(relation["id"], True, "合成归档")
+        self.assertEqual(store.list_relations("active"), [])
+        store.set_relation_archived(relation["id"], False, "合成恢复")
+        self.assertEqual(len(store.layered_context("测试同行者")["layers"][2]["items"]), 1)
         self.assertEqual(settings["review_mode"], "joint")
 
         second = make_store(self.root / "identity-copy")

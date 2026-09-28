@@ -455,8 +455,11 @@ class BetaStore:
             self._save(data)
             return deepcopy(row)
 
-    def list_relations(self) -> list[dict]:
-        return sorted(deepcopy(self.snapshot()["relations"]), key=lambda row: row.get("updated_at", ""), reverse=True)
+    def list_relations(self, state: str = "all") -> list[dict]:
+        rows = deepcopy(self.snapshot()["relations"])
+        if state != "all":
+            rows = [row for row in rows if row.get("state", "active") == state]
+        return sorted(rows, key=lambda row: row.get("updated_at", ""), reverse=True)
 
     def upsert_relation(self, value: dict) -> dict:
         name = str(value.get("name", "")).strip()
@@ -473,25 +476,53 @@ class BetaStore:
         with self.lock:
             data = self._read()
             existing = next((index for index, item in enumerate(data["relations"]) if item.get("id") == relation_id), None)
+            previous = data["relations"][existing] if existing is not None else {}
+            if existing is not None and "facts" not in value:
+                facts = list(previous.get("facts") or [])
+            if existing is not None and "source_ids" not in value:
+                source_ids = list(previous.get("source_ids") or [])
+            def field(key: str, limit: int = 2000) -> str:
+                return str(value.get(key, previous.get(key, ""))).strip()[:limit]
+            details = {
+                "status": field("status", 500), "first_impression": field("first_impression"),
+                "summary": field("summary"), "continuity": field("continuity"),
+                "next_thread": field("next_thread"), "boundary": field("boundary"),
+            }
             if existing is None:
                 row = {"id": relation_id, "name": name[:120], "relation": relation[:120],
                        "facts": facts, "private_note": str(value.get("private_note", value.get("note", ""))).strip()[:2000],
-                       "source_ids": source_ids, "visibility": visibility, "state": "active",
+                       "source_ids": source_ids, "visibility": visibility, "state": "active", **details,
                        "created_at": now, "updated_at": now, "versions": []}
                 data["relations"].append(row)
                 action = "relation_added"
             else:
-                previous = data["relations"][existing]
                 versions = list(previous.get("versions") or [])
-                versions.append({key: deepcopy(previous.get(key)) for key in ("name", "relation", "facts", "source_ids", "visibility", "updated_at")})
+                versions.append({key: deepcopy(previous.get(key)) for key in (
+                    "name", "relation", "facts", "source_ids", "visibility", "status", "first_impression",
+                    "summary", "continuity", "next_thread", "boundary", "updated_at")})
                 row = {**previous, "name": name[:120], "relation": relation[:120], "facts": facts,
                        "private_note": str(value.get("private_note", value.get("note", previous.get("private_note", "")))).strip()[:2000],
-                       "source_ids": source_ids, "visibility": visibility, "updated_at": now, "versions": versions[-50:]}
+                       "source_ids": source_ids, "visibility": visibility, **details,
+                       "updated_at": now, "versions": versions[-50:]}
                 data["relations"][existing] = row
                 action = "relation_updated"
             data["events"].append({"id": uuid.uuid4().hex, "type": action, "at": now, "target": relation_id})
             self._save(data)
         return row
+
+    def set_relation_archived(self, relation_id: str, archived: bool, reason: str) -> dict:
+        now = utc_now()
+        with self.lock:
+            data = self._read()
+            row = next((item for item in data["relations"] if item.get("id") == relation_id), None)
+            if row is None:
+                raise KeyError(relation_id)
+            row.update({"state": "archived" if archived else "active", "updated_at": now})
+            data["events"].append({"id": uuid.uuid4().hex,
+                                   "type": "relation_archived" if archived else "relation_restored",
+                                   "at": now, "target": relation_id, "reason": str(reason)[:500]})
+            self._save(data)
+            return deepcopy(row)
 
     def continuity_settings(self) -> dict:
         return deepcopy(self.snapshot()["continuity_settings"])

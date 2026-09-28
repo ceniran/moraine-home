@@ -88,9 +88,16 @@ class BetaServerTest(unittest.TestCase):
         saved_avatar = self.request("/api/profile", "POST", browser_payload)[1]
         self.assertEqual(saved_avatar["avatar"], browser_payload["avatar"])
         self.assertEqual(saved_avatar["display_name"], "新名字")
-        relation = self.request("/api/relations", "POST", {"name": "同行者", "relation": "协作者", "note": "合成节点"})[1]
+        relation = self.request("/api/relations", "POST", {"name": "同行者", "relation": "协作者", "note": "合成节点", "summary": "共同测试"})[1]
         self.assertEqual(relation["relation"], "协作者")
         self.assertEqual(self.request("/api/relations")[1]["items"][0]["name"], "同行者")
+        graph = self.request("/api/dwell-v2/relations")[1]
+        self.assertEqual(graph["edges"][0]["to"], relation["id"])
+        self.assertEqual(graph["relationships"][0]["summary"], "共同测试")
+        self.assertEqual(self.request(f"/api/relations/{relation['id']}/archive", "POST", {"reason": "合成归档"})[1]["state"], "archived")
+        relation_layer = {row["name"]: row for row in self.request("/api/recall/layered?query=%E5%90%8C%E8%A1%8C%E8%80%85")[1]["layers"]}["relations"]
+        self.assertEqual(relation_layer["items"], [])
+        self.assertEqual(self.request(f"/api/relations/{relation['id']}/restore", "POST", {"reason": "合成恢复"})[1]["state"], "active")
         self.assertEqual(self.request("/api/settings", "POST", {"review_mode": "joint"})[1]["review_mode"], "joint")
         revised = self.request("/api/memories/m1/revise", "POST", {"title": "离线检索修订", "content": "修正后的本地搜索", "reason": "修正表述"})[1]
         self.assertEqual(len(revised["versions"]), 1)
