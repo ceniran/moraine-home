@@ -3212,12 +3212,6 @@
     if (displayName && displayName !== cairnProfile.display_name) await saveDirectProfile({ display_name: displayName }, '正在保存名字……');
     closeDirectNameEditor();
   });
-  document.querySelector('[data-resident-card-shell]')?.addEventListener('click', event => {
-    if (event.target.closest('[data-edit-cairn-avatar]')) {
-      event.stopPropagation();
-      directAvatarInput.click();
-    }
-  });
   directAvatarInput?.addEventListener('change', async () => {
     const file = directAvatarInput.files[0];
     if (!file) return;
