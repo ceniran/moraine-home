@@ -73,6 +73,16 @@ class BetaStoreTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             store.add_candidate({"title": "没有正文"})
 
+    def test_batch_candidates_remain_separate_but_share_episode(self):
+        store = make_store(self.root)
+        rows = store.add_candidates([
+            {"title": "第一件事", "content": "独立结果一"},
+            {"title": "第二件事", "content": "独立结果二"},
+        ], episode_id="episode_same_conversation")
+        self.assertEqual(len(rows), 2)
+        self.assertNotEqual(rows[0]["id"], rows[1]["id"])
+        self.assertEqual({row["episode_id"] for row in rows}, {"episode_same_conversation"})
+
     def test_relationship_candidate_reaches_protected_review_but_is_not_written(self):
         store = make_store(self.root)
         candidate = store.add_candidate({

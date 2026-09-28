@@ -13,6 +13,7 @@ from pathlib import Path
 from .adviser import AdviserSecretStore
 from .aml_adapter import AMLAdapter
 from .beta_store import BetaStore
+from .candidate_capture import write_guidance
 
 
 MAX_BODY = 2 * 1024 * 1024
@@ -261,7 +262,19 @@ def create_beta_server(env: dict[str, str] | None = None):
                 if parsed.path == "/aml/search":
                     return self._json(200, aml.search(body))
                 if parsed.path == "/api/candidates":
-                    return self._json(201, store.add_candidate(body))
+                    episode_id = str(body.get("episode_id") or "").strip()[:160]
+                    row = store.add_candidate(body)
+                    return self._json(201, {**row, "write_guidance": write_guidance(
+                        [row], episode_id=episode_id, episode_complete=body.get("episode_complete") is True,
+                        batch=False,
+                    )})
+                if parsed.path == "/api/candidates/batch":
+                    episode_id = str(body.get("episode_id") or "").strip()[:160]
+                    rows = store.add_candidates(body.get("candidates") or [], episode_id=episode_id)
+                    return self._json(201, {"items": rows, "count": len(rows), "write_guidance": write_guidance(
+                        rows, episode_id=episode_id, episode_complete=body.get("episode_complete") is True,
+                        batch=True,
+                    )})
                 if parsed.path == "/api/dwell-v2/actions/preview":
                     if body.get("action") != "candidate_merge":
                         return self._json(400, {"error": "unsupported_dwell_v2_action"})

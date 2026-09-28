@@ -428,12 +428,12 @@ class BetaStore:
         scored.sort(key=lambda item: (item[0], item[1]), reverse=True)
         return [{**deepcopy(row), "score": score / max(1, len(words) * 3), "search_mode": "keyword"} for score, _, row in scored[: max(1, min(int(limit), 100))]]
 
-    def add_candidate(self, value: dict) -> dict:
+    def _candidate_row(self, value: dict, now: str | None = None) -> dict:
         title = str(value.get("title", "")).strip()
         content = str(value.get("content", "")).strip()
         if not title or not content:
             raise ValueError("title and content are required")
-        now = utc_now()
+        now = now or utc_now()
         row = {
             "id": str(value.get("id") or f"candidate_{uuid.uuid4().hex[:12]}"),
             "title": title[:200],
@@ -444,11 +444,17 @@ class BetaStore:
             "created_at": now,
             "state": "pending",
             "basket": str(value.get("basket") or "unassigned")[:120],
+            "episode_id": str(value.get("episode_id") or "")[:160],
             "requested_importance": max(0.0, min(1.0, float(value.get("requested_importance", value.get("importance", 0.5))))),
         }
         row["admission"] = classify_candidate(row)
         if value.get("expires_at"):
             row["expires_at"] = str(value["expires_at"])
+        return row
+
+    def add_candidate(self, value: dict) -> dict:
+        row = self._candidate_row(value)
+        now = row["created_at"]
         with self.lock:
             data = self._read()
             if any(item.get("id") == row["id"] for item in data["candidates"]):
@@ -457,6 +463,36 @@ class BetaStore:
             data["events"].append({"id": uuid.uuid4().hex, "type": "candidate_added", "at": now, "target": row["id"]})
             self._save(data)
         return row
+
+    def add_candidates(self, values: list[dict], episode_id: str = "") -> list[dict]:
+        if not isinstance(values, list) or not values:
+            raise ValueError("candidates is required")
+        if len(values) > 20:
+            raise ValueError("at most 20 candidates may be added at once")
+        shared_episode = str(episode_id or "").strip()[:160]
+        inputs = []
+        for value in values:
+            if not isinstance(value, dict):
+                raise ValueError("every candidate must be an object")
+            candidate = dict(value)
+            if shared_episode:
+                candidate["episode_id"] = shared_episode
+            inputs.append(candidate)
+        now = utc_now()
+        rows = [self._candidate_row(candidate, now) for candidate in inputs]
+        ids = [row["id"] for row in rows]
+        if len(ids) != len(set(ids)):
+            raise ValueError("candidate ids in a batch must be unique")
+        with self.lock:
+            data = self._read()
+            existing_ids = {item.get("id") for item in data["candidates"]}
+            if any(candidate_id in existing_ids for candidate_id in ids):
+                raise ValueError("candidate id already exists")
+            data["candidates"].extend(rows)
+            data["events"].append({"id": uuid.uuid4().hex, "type": "candidate_batch_added", "at": now,
+                                   "targets": ids, "episode_id": shared_episode})
+            self._save(data)
+        return deepcopy(rows)
 
     def consolidation_preview(self, candidate_ids: list[str], relations: dict | None = None) -> dict:
         ids = {str(value) for value in candidate_ids}

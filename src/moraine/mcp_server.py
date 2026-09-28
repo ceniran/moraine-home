@@ -20,6 +20,10 @@ SERVER_INSTRUCTIONS = (
     "in joint mode. Search results are clues, candidates are unverified, and weight is not affection. "
     "Preview before consolidation; preserve attribution, event time, versions, and recovery paths. "
     "Use revision for mistakes, replacement for later change, and archive for reversible removal. "
+    "When new durable material appears, submit it as candidates during the conversation rather than waiting "
+    "for a daily summary. Separate independent subjects, actions, outcomes, or lifecycles even when they share "
+    "a day; use one episode_id to preserve common provenance. After a write, follow write_guidance and either "
+    "add missing events or explicitly mark the episode complete. Do not create memories merely to satisfy a quota. "
     "Before whole-store import, inspect the payload and remember that Moraine creates a recovery snapshot."
 )
 
@@ -118,18 +122,37 @@ def create_mcp(client: MoraineClient) -> FastMCP:
         tags: list[str] | None = None,
         occurred_at: str | None = None,
         basket: str = "agent",
+        episode_id: str = "",
+        episode_complete: bool = False,
     ) -> dict:
-        """Place new material in the review queue without making it a long-term memory. Preserve attribution and do not submit secrets unnecessarily."""
+        """Place one event in the review queue, then follow write_guidance. Use the same episode_id for separate events from one conversation; do not merge them merely because they happened on the same day."""
         payload: dict[str, Any] = {
             "title": title,
             "content": content,
             "kind": kind,
             "tags": tags or [],
             "basket": basket,
+            "episode_id": episode_id,
+            "episode_complete": episode_complete,
         }
         if occurred_at:
             payload["occurred_at"] = occurred_at
         return client.request("/api/candidates", "POST", payload)
+
+    @server.tool(annotations=reversible_write)
+    def candidate_add_batch(
+        candidates: list[dict[str, Any]],
+        episode_id: str = "",
+        episode_complete: bool = False,
+    ) -> dict:
+        """Submit multiple independent events from one conversation in a single call. Each item needs its own title and content; shared provenance does not make events one memory. Follow the single batch-level write_guidance."""
+        if not candidates:
+            raise ValueError("candidates is required")
+        return client.request("/api/candidates/batch", "POST", {
+            "candidates": candidates,
+            "episode_id": episode_id,
+            "episode_complete": episode_complete,
+        })
 
     @server.tool(annotations=reversible_write)
     def candidate_decide(candidate_id: str, action: str) -> dict:

@@ -93,6 +93,25 @@ class BetaServerTest(unittest.TestCase):
         self.assertEqual(self.request("/api/overview")[1]["candidates"], 1)
         self.assertEqual(self.request("/api/overview")[1]["active"], 1)
 
+    def test_candidate_write_guidance_and_batch_endpoint(self):
+        single = self.request("/api/candidates", "POST", {
+            "title": "同日第一件事", "content": "完成接口，然后又修复页面",
+            "episode_id": "episode_http_synthetic",
+        })[1]
+        self.assertTrue(single["write_guidance"]["needs_episode_confirmation"])
+        self.assertTrue(single["write_guidance"]["possible_multiple_events"])
+        batch = self.request("/api/candidates/batch", "POST", {
+            "episode_id": "episode_http_batch",
+            "episode_complete": True,
+            "candidates": [
+                {"title": "事件甲", "content": "结果甲"},
+                {"title": "事件乙", "content": "结果乙"},
+            ],
+        })[1]
+        self.assertEqual(batch["count"], 2)
+        self.assertFalse(batch["write_guidance"]["needs_episode_confirmation"])
+        self.assertEqual({row["episode_id"] for row in batch["items"]}, {"episode_http_batch"})
+
     def test_snapshot_routing_and_retention_http_chain(self):
         settings = self.request("/api/settings", "POST", {
             "identity_relation_routing": True,

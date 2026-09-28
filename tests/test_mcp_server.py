@@ -56,7 +56,7 @@ class McpToolsTest(unittest.IsolatedAsyncioTestCase):
                     set(tools),
                     {
                         "system_overview", "memory_list", "memory_search", "memory_get",
-                        "candidate_list", "candidate_tiering_suggestions", "candidate_add", "candidate_decide", "candidate_route", "candidate_shred_expired",
+                        "candidate_list", "candidate_tiering_suggestions", "candidate_add", "candidate_add_batch", "candidate_decide", "candidate_route", "candidate_shred_expired",
                         "consolidation_preview", "consolidation_apply",
                         "rollback_list", "consolidation_rollback",
                         "memory_set_archived", "memory_set_importance", "memory_revise", "memory_replace",
@@ -72,6 +72,18 @@ class McpToolsTest(unittest.IsolatedAsyncioTestCase):
 
                 added = await session.call_tool("candidate_add", {"title": "合成事件", "content": "只用于MCP验收", "tags": ["synthetic"]})
                 candidate = payload(added)
+                self.assertTrue(candidate["write_guidance"]["needs_episode_confirmation"])
+                batch = payload(await session.call_tool("candidate_add_batch", {
+                    "episode_id": "episode_mcp_synthetic",
+                    "episode_complete": True,
+                    "candidates": [
+                        {"title": "第一件事", "content": "完成独立功能"},
+                        {"title": "第二件事", "content": "修复另一个问题"},
+                    ],
+                }))
+                self.assertEqual(batch["count"], 2)
+                self.assertFalse(batch["write_guidance"]["needs_episode_confirmation"])
+                self.assertEqual({row["episode_id"] for row in batch["items"]}, {"episode_mcp_synthetic"})
                 tiering = await session.call_tool("candidate_tiering_suggestions", {})
                 self.assertEqual(payload(tiering)["items"][0]["suggested_tier"], "uncertain")
                 durable_added = await session.call_tool("candidate_add", {
