@@ -646,9 +646,27 @@
   function readAvatar(file) {
     return new Promise((resolve, reject) => {
       if (!file) return resolve(cairnProfile.avatar || '');
-      if (file.size > 600 * 1024) return reject(new Error('avatar_too_large'));
       const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onload = () => {
+        const original = String(reader.result || '');
+        if (file.size <= 600 * 1024) { resolve(original); return; }
+        const image = new Image();
+        image.onload = () => {
+          const longest = Math.max(image.naturalWidth || 1, image.naturalHeight || 1);
+          const scale = Math.min(1, 512 / longest);
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+          canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+          const context = canvas.getContext('2d');
+          if (!context) { reject(new Error('avatar_encode_failed')); return; }
+          context.drawImage(image, 0, 0, canvas.width, canvas.height);
+          const compressed = canvas.toDataURL('image/jpeg', .82);
+          if (compressed.length > 850000) { reject(new Error('avatar_too_large')); return; }
+          resolve(compressed);
+        };
+        image.onerror = () => reject(new Error('avatar_format_unsupported'));
+        image.src = original;
+      };
       reader.onerror = reject;
       reader.readAsDataURL(file);
     });
@@ -3179,14 +3197,15 @@
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ ...cairnProfile, ...changes })
       });
-      if (!response.ok) throw new Error(`profile_${response.status}`);
-      cairnProfile = normalizeInstanceProfile(await response.json());
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || `profile_${response.status}`);
+      cairnProfile = normalizeInstanceProfile(payload);
       renderCairnProfile();
       directProfileResult.textContent = '已保存';
       window.setTimeout(() => { directProfileResult.textContent = '点击头像可由人类自定义'; }, 1200);
       return true;
-    } catch (_) {
-      directProfileResult.textContent = '保存失败，原资料没有改变';
+    } catch (error) {
+      directProfileResult.textContent = `保存失败：${error.message || '未知错误'}；原资料没有改变`;
       return false;
     }
   }
@@ -3219,7 +3238,7 @@
       const avatar = await readAvatar(file);
       await saveDirectProfile({ avatar }, '正在保存头像……');
     } catch (error) {
-      directProfileResult.textContent = error.message === 'avatar_too_large' ? '头像请不要超过 600KB' : '头像读取失败';
+      directProfileResult.textContent = error.message === 'avatar_too_large' ? '图片压缩后仍然过大，请换一张图片' : error.message === 'avatar_format_unsupported' ? '暂不支持这种图片格式，请使用 JPG、PNG 或 WebP' : '头像读取或压缩失败';
     } finally { directAvatarInput.value = ''; }
   });
   document.querySelector('[data-role-names-form]')?.addEventListener('submit', async event => {
