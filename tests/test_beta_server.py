@@ -83,6 +83,11 @@ class BetaServerTest(unittest.TestCase):
         renamed = self.request("/api/profile", "POST", {"display_name": "新名字"})[1]
         self.assertEqual(renamed["user_display_name"], "测试用户")
         self.assertEqual(renamed["avatar"], avatar)
+        browser_payload = {key: renamed.get(key, "") for key in ("display_name", "user_display_name", "summary", "avatar")}
+        browser_payload["avatar"] = "data:image/jpeg;base64,/9j/4AAQSkZJRg=="
+        saved_avatar = self.request("/api/profile", "POST", browser_payload)[1]
+        self.assertEqual(saved_avatar["avatar"], browser_payload["avatar"])
+        self.assertEqual(saved_avatar["display_name"], "新名字")
         relation = self.request("/api/relations", "POST", {"name": "同行者", "relation": "协作者", "note": "合成节点"})[1]
         self.assertEqual(relation["relation"], "协作者")
         self.assertEqual(self.request("/api/relations")[1]["items"][0]["name"], "同行者")

@@ -3193,9 +3193,16 @@
   async function saveDirectProfile(changes, pendingLabel) {
     directProfileResult.textContent = pendingLabel;
     try {
+      const writableProfile = {
+        display_name: cairnProfile.display_name || '',
+        user_display_name: cairnProfile.user_display_name || '用户',
+        summary: cairnProfile.summary || cairnProfile.status || '',
+        avatar: cairnProfile.avatar || '',
+        ...changes
+      };
       const response = await fetch('/moraine-beta/api/profile', {
         method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ ...cairnProfile, ...changes })
+        body: JSON.stringify(writableProfile)
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || `profile_${response.status}`);
