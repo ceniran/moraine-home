@@ -174,6 +174,11 @@ def create_beta_server(env: dict[str, str] | None = None):
                     context = store.layered_context(query.get("query", [""])[0], False)
                     return self._json(200, {**context, "mode": "live_read_only_layered_recall",
                                             "persisted": False, "writes": []})
+                if parsed.path == "/api/dwell-v2/profile-recall-policy":
+                    return self._json(200, {"ok": True, "policy": store.profile_recall_policy()})
+                if parsed.path == "/api/dwell-v2/profile-growth-candidates":
+                    return self._json(200, {"ok": True,
+                                            "pending": store.list_profile_growth_candidates("pending")})
                 if parsed.path == "/api/dwell-v2/reflections":
                     return self._json(200, {"ok": True, "reflections": []})
                 if parsed.path == "/api/dwell-v2/candidates":
@@ -373,6 +378,13 @@ def create_beta_server(env: dict[str, str] | None = None):
                     return self._json(200, store.upsert_relation(body))
                 if parsed.path == "/api/continuity/settings":
                     return self._json(200, store.update_continuity_settings(body))
+                if parsed.path == "/api/dwell-v2/profile-recall-policy":
+                    return self._json(200, {"ok": True, "policy": store.update_profile_recall_policy(body)})
+                if parsed.path == "/api/dwell-v2/profile-growth-candidates":
+                    return self._json(201, {"ok": True, "candidate": store.add_profile_growth_candidate(body)})
+                if parsed.path == "/api/dwell-v2/profile-growth-candidates/decide":
+                    return self._json(200, {"ok": True, "candidate": store.decide_profile_growth_candidate(
+                        str(body.get("candidate_id") or ""), str(body.get("action") or ""))})
                 if parsed.path == "/api/recall/layered":
                     return self._json(200, store.layered_context(str(body.get("query") or ""),
                                                                  bool(body.get("include_history", False)),

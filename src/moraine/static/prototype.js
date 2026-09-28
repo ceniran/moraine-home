@@ -2068,8 +2068,8 @@
   let candidateShredPolicy = { enabled: true, retention_hours: 72 };
   let identityRoutingPolicy = { enabled: true, retain_memory_copy: false };
   let profileRecallPolicy = { modules: {
-    cairn_preferences: { conversation_enabled: false, growth_enabled: false },
-    xiaoran_profile: { conversation_enabled: false, growth_enabled: false }
+    agent_profile: { conversation_enabled: true, growth_enabled: false },
+    user_profile: { conversation_enabled: true, growth_enabled: false }
   } };
   let profileGrowthCandidates = [];
   let jevSettings = { enabled: false, configured: false, use_for_wakeup: true };
@@ -2288,8 +2288,8 @@
     });
     const summary = document.querySelector('[data-profile-policy-summary]');
     if (summary) summary.textContent = profileRecallPolicy.connected_to_chat
-      ? '参与对话已接入相关性门控；使用结果会留在这里。'
-      : '档案控制暂未接入聊天链。';
+      ? '开关已接入 Moraine 分层召回；宿主 Agent 仍需调用 layered_recall。'
+      : '档案控制暂未接入 Moraine 分层召回。';
   }
   function renderProfileGrowthList(card, state) {
     const container = card.querySelector('[data-profile-growth-list]');
@@ -2317,7 +2317,7 @@
     article.querySelectorAll('button').forEach(item => { item.disabled = true; });
     try {
       const response = await fetch('/moraine-beta/api/dwell-v2/profile-growth-candidates/decide', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ candidate_id: candidateId, action, actor: 'xiaoran' }) });
+        body: JSON.stringify({ candidate_id: candidateId, action, actor: 'owner' }) });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || `profile_growth_decision_${response.status}`);
       await loadProfileGrowthCandidates();
@@ -2342,7 +2342,7 @@
     const next = { ...current, [`${field}_enabled`]: enabled };
     button.disabled = true;
     try {
-      const response = await fetch('/moraine-beta/api/dwell-v2/profile-recall-policy', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ updated_by: 'xiaoran', modules: { [moduleKey]: next } }) });
+      const response = await fetch('/moraine-beta/api/dwell-v2/profile-recall-policy', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ updated_by: 'owner', modules: { [moduleKey]: next } }) });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || `profile_policy_${response.status}`);
       renderProfileRecallPolicy(payload.policy);

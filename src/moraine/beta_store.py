@@ -53,6 +53,7 @@ class BetaStore:
             "profile": {"display_name": "", "summary": "", "self_core": []},
             "self_core_records": [],
             "user_profile_records": [],
+            "profile_growth_candidates": [],
             "relations": [],
             "continuity_settings": {
                 "wakeup_enabled": False,
@@ -60,6 +61,13 @@ class BetaStore:
                 "max_choices": 3,
                 "total_budget": 5000,
                 "layer_budgets": {},
+            },
+            "profile_recall_policy": {
+                "modules": {
+                    "agent_profile": {"conversation_enabled": True, "growth_enabled": False},
+                    "user_profile": {"conversation_enabled": True, "growth_enabled": False},
+                },
+                "updated_at": None,
             },
             "settings": {"review_mode": "autonomous", "candidate_retention_enabled": False,
                          "candidate_retention_hours": 168, "identity_relation_routing": False},
@@ -91,14 +99,24 @@ class BetaStore:
         payload.setdefault("profile", {"display_name": "", "summary": "", "self_core": []})
         payload.setdefault("self_core_records", [])
         payload.setdefault("user_profile_records", [])
+        payload.setdefault("profile_growth_candidates", [])
         payload.setdefault("relations", [])
         payload.setdefault("continuity_settings", {"wakeup_enabled": False, "adviser_enabled": False,
                                                     "max_choices": 3, "total_budget": 5000, "layer_budgets": {}})
         payload["continuity_settings"].setdefault("total_budget", 5000)
+        payload.setdefault("profile_recall_policy", {
+            "modules": {
+                "agent_profile": {"conversation_enabled": True, "growth_enabled": False},
+                "user_profile": {"conversation_enabled": True, "growth_enabled": False},
+            },
+            "updated_at": None,
+        })
         payload.setdefault("settings", {"review_mode": "autonomous"})
         if (not isinstance(payload["profile"], dict) or not isinstance(payload["relations"], list)
                 or not isinstance(payload["self_core_records"], list) or not isinstance(payload["user_profile_records"], list)
                 or not isinstance(payload["continuity_settings"], dict)
+                or not isinstance(payload["profile_recall_policy"], dict)
+                or not isinstance(payload["profile_growth_candidates"], list)
                 or not isinstance(payload["settings"], dict) or not isinstance(payload["rollbacks"], list)):
             raise ValueError("profile and settings must be objects; relations must be a list")
         legacy_settings = payload["settings"]
@@ -110,6 +128,107 @@ class BetaStore:
             **({"updated_at": legacy_settings["updated_at"]} if legacy_settings.get("updated_at") else {}),
         }
         return payload
+
+    def profile_recall_policy(self) -> dict:
+        policy = deepcopy(self.snapshot()["profile_recall_policy"])
+        modules = policy.setdefault("modules", {})
+        # Accept the old private-Dwell keys without keeping private names in the public contract.
+        if "cairn_preferences" in modules and "agent_profile" not in modules:
+            modules["agent_profile"] = modules.pop("cairn_preferences")
+        if "xiaoran_profile" in modules and "user_profile" not in modules:
+            modules["user_profile"] = modules.pop("xiaoran_profile")
+        for key in ("agent_profile", "user_profile"):
+            modules.setdefault(key, {"conversation_enabled": True, "growth_enabled": False})
+        return {**policy, "connected_to_chat": True,
+                "connection_scope": "moraine_layered_recall",
+                "host_must_call_layered_recall": True}
+
+    def update_profile_recall_policy(self, value: dict) -> dict:
+        incoming = dict(value.get("modules") or {})
+        aliases = {"cairn_preferences": "agent_profile", "xiaoran_profile": "user_profile"}
+        now = utc_now()
+        with self.lock:
+            data = self._read()
+            policy = data["profile_recall_policy"]
+            modules = policy.setdefault("modules", {})
+            for raw_key, changes in incoming.items():
+                key = aliases.get(raw_key, raw_key)
+                if key not in {"agent_profile", "user_profile"} or not isinstance(changes, dict):
+                    raise ValueError("invalid profile module")
+                current = dict(modules.get(key) or {})
+                for field in ("conversation_enabled", "growth_enabled"):
+                    if field in changes:
+                        current[field] = bool(changes[field])
+                modules[key] = current
+            policy["updated_at"] = now
+            data["events"].append({"id": uuid.uuid4().hex, "type": "profile_recall_policy_updated",
+                                   "at": now, "target": "profile_recall_policy"})
+            self._save(data)
+        return self.profile_recall_policy()
+
+    def list_profile_growth_candidates(self, state: str = "pending") -> list[dict]:
+        rows = deepcopy(self.snapshot()["profile_growth_candidates"])
+        if state != "all":
+            rows = [row for row in rows if row.get("state", "pending") == state]
+        return sorted(rows, key=lambda row: row.get("created_at", ""))
+
+    def add_profile_growth_candidate(self, value: dict) -> dict:
+        module = {"cairn_preferences": "agent_profile", "xiaoran_profile": "user_profile"}.get(
+            str(value.get("module") or ""), str(value.get("module") or ""))
+        policy = self.profile_recall_policy()
+        if module not in {"agent_profile", "user_profile"}:
+            raise ValueError("module must be agent_profile or user_profile")
+        if not policy["modules"][module].get("growth_enabled"):
+            raise ValueError("profile growth is disabled for this module")
+        text = str(value.get("text") or value.get("content") or "").strip()
+        reason = str(value.get("reason") or "").strip()
+        source_id = str(value.get("source_candidate_id") or "").strip()
+        if not text or not reason or not source_id:
+            raise ValueError("text, reason, and source_candidate_id are required")
+        now = utc_now()
+        row = {"id": f"profile_growth_{uuid.uuid4().hex[:12]}", "module": module,
+               "title": str(value.get("title") or "档案更新候选")[:200], "text": text[:1000],
+               "content": text[:1000], "reason": reason[:500], "source_candidate_id": source_id[:160],
+               "category": str(value.get("category") or "preference")[:40],
+               "state": "pending", "created_at": now}
+        with self.lock:
+            data = self._read()
+            data["profile_growth_candidates"].append(row)
+            data["events"].append({"id": uuid.uuid4().hex, "type": "profile_growth_candidate_added",
+                                   "at": now, "target": row["id"], "source_ids": [source_id[:160]]})
+            self._save(data)
+        return deepcopy(row)
+
+    def decide_profile_growth_candidate(self, candidate_id: str, action: str) -> dict:
+        if action not in {"approve", "ignore"}:
+            raise ValueError("action must be approve or ignore")
+        with self.lock:
+            data = self._read()
+            row = next((item for item in data["profile_growth_candidates"] if item.get("id") == candidate_id), None)
+            if row is None:
+                raise KeyError(candidate_id)
+            if row.get("state", "pending") != "pending":
+                raise ValueError("profile growth candidate is already decided")
+        if action == "approve":
+            source_ids = [row["source_candidate_id"]]
+            if row["module"] == "agent_profile":
+                record = self.upsert_self_core({"text": row["text"], "reason": row["reason"],
+                                                "source_ids": source_ids})
+            else:
+                record = self.upsert_user_profile({"text": row["text"], "reason": row["reason"],
+                                                   "source_ids": source_ids, "category": row["category"]})
+        else:
+            record = None
+        now = utc_now()
+        with self.lock:
+            data = self._read()
+            stored = next(item for item in data["profile_growth_candidates"] if item.get("id") == candidate_id)
+            stored.update({"state": "approved" if action == "approve" else "ignored", "decided_at": now,
+                           **({"record_id": record["id"]} if record else {})})
+            data["events"].append({"id": uuid.uuid4().hex, "type": f"profile_growth_candidate_{action}d",
+                                   "at": now, "target": candidate_id})
+            self._save(data)
+            return deepcopy(stored)
 
     def snapshot(self) -> dict:
         with self.lock:
@@ -370,6 +489,11 @@ class BetaStore:
             if key not in DEFAULT_LAYER_BUDGETS:
                 raise ValueError("invalid layer budget")
             effective[key] = min(int(value), int(configured[key]))
+        policy = self.profile_recall_policy()["modules"]
+        if not policy["agent_profile"].get("conversation_enabled"):
+            effective["self_core"] = 0
+        if not policy["user_profile"].get("conversation_enabled"):
+            effective["user_profile"] = 0
         return build_layered_context(self.snapshot(), query=str(query), include_history=bool(include_history),
                                      budgets=effective, total_budget=int(settings.get("total_budget", 5000)))
 
@@ -908,9 +1032,10 @@ class BetaStore:
             raise ValueError("unsupported import schema")
         clean = self._empty()
         for key in ("memories", "candidates", "events", "self_core_records", "user_profile_records",
-                    "relations", "rollbacks"):
+                    "profile_growth_candidates", "relations", "rollbacks"):
             value = payload.get(key)
-            if value is None and key in {"self_core_records", "user_profile_records", "relations", "rollbacks"}:
+            if value is None and key in {"self_core_records", "user_profile_records", "profile_growth_candidates",
+                                         "relations", "rollbacks"}:
                 value = []
             if not isinstance(value, list):
                 raise ValueError(f"{key} must be a list")
@@ -923,6 +1048,10 @@ class BetaStore:
         if not isinstance(continuity_settings, dict):
             raise ValueError("continuity_settings must be an object")
         clean["continuity_settings"] = deepcopy(continuity_settings)
+        profile_recall_policy = payload.get("profile_recall_policy") or clean["profile_recall_policy"]
+        if not isinstance(profile_recall_policy, dict):
+            raise ValueError("profile_recall_policy must be an object")
+        clean["profile_recall_policy"] = deepcopy(profile_recall_policy)
         settings = payload.get("settings") or {"review_mode": "autonomous"}
         if (not isinstance(settings, dict)
                 or settings.get("review_mode", "autonomous") not in {"autonomous", "joint"}

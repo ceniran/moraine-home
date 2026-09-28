@@ -83,6 +83,32 @@ class BetaStoreTest(unittest.TestCase):
         self.assertNotEqual(rows[0]["id"], rows[1]["id"])
         self.assertEqual({row["episode_id"] for row in rows}, {"episode_same_conversation"})
 
+    def test_profile_policy_controls_layered_recall_and_reviewed_growth(self):
+        store = make_store(self.root)
+        store.upsert_self_core({"text": "我偏好先核对来源", "reason": "稳定选择", "source_ids": ["event-1"]})
+        store.upsert_user_profile({"text": "用户喜欢简洁说明", "reason": "用户明确表达",
+                                   "source_ids": ["event-2"], "category": "communication"})
+        layers = {row["name"]: row for row in store.layered_context()["layers"]}
+        self.assertEqual(len(layers["self_core"]["items"]), 1)
+        self.assertEqual(len(layers["user_profile"]["items"]), 1)
+
+        policy = store.update_profile_recall_policy({"modules": {
+            "agent_profile": {"conversation_enabled": False, "growth_enabled": True},
+            "user_profile": {"conversation_enabled": True, "growth_enabled": True},
+        }})
+        self.assertFalse(policy["modules"]["agent_profile"]["conversation_enabled"])
+        layers = {row["name"]: row for row in store.layered_context()["layers"]}
+        self.assertEqual(layers["self_core"]["items"], [])
+        self.assertEqual(len(layers["user_profile"]["items"]), 1)
+
+        candidate = store.add_profile_growth_candidate({
+            "module": "user_profile", "title": "新的协作偏好", "text": "用户希望先给结论",
+            "reason": "多次明确表达", "source_candidate_id": "candidate-1", "category": "communication",
+        })
+        decided = store.decide_profile_growth_candidate(candidate["id"], "approve")
+        self.assertEqual(decided["state"], "approved")
+        self.assertTrue(any(row["text"] == "用户希望先给结论" for row in store.list_user_profile()))
+
     def test_relationship_candidate_reaches_protected_review_but_is_not_written(self):
         store = make_store(self.root)
         candidate = store.add_candidate({

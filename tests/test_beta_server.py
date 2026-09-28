@@ -86,6 +86,25 @@ class BetaServerTest(unittest.TestCase):
         replaced = self.request("/api/memories/m1/replace", "POST", {"replacement_id": memory["id"], "reason": "事实发生变化"})[1]
         self.assertEqual(replaced["old"]["state"], "superseded")
 
+    def test_profile_policy_and_growth_http_chain(self):
+        status, payload = self.request("/api/dwell-v2/profile-recall-policy")
+        self.assertEqual(status, 200)
+        self.assertTrue(payload["policy"]["connected_to_chat"])
+        policy = self.request("/api/dwell-v2/profile-recall-policy", "POST", {"modules": {
+            "user_profile": {"conversation_enabled": False, "growth_enabled": True}
+        }})[1]["policy"]
+        self.assertFalse(policy["modules"]["user_profile"]["conversation_enabled"])
+        candidate = self.request("/api/dwell-v2/profile-growth-candidates", "POST", {
+            "module": "user_profile", "title": "沟通偏好", "text": "用户希望先给结论",
+            "reason": "明确表达", "source_candidate_id": "source-1", "category": "communication",
+        })[1]["candidate"]
+        pending = self.request("/api/dwell-v2/profile-growth-candidates")[1]["pending"]
+        self.assertEqual([row["id"] for row in pending], [candidate["id"]])
+        decided = self.request("/api/dwell-v2/profile-growth-candidates/decide", "POST", {
+            "candidate_id": candidate["id"], "action": "approve"
+        })[1]["candidate"]
+        self.assertEqual(decided["state"], "approved")
+        self.assertEqual(self.request("/api/user-profile")[1]["items"][0]["text"], "用户希望先给结论")
     def test_candidate_admission_rollback_http_chain(self):
         memory = self.request("/api/candidates/admit", "POST", {"candidate_ids": ["c1"]})[1]
         result = self.request(f"/api/rollbacks/{memory['rollback']['id']}", "POST", {})[1]
