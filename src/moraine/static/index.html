@@ -28,6 +28,11 @@
   <main class="prototype" id="prototype">
     <button class="sidebar-scrim" id="sidebarScrim" type="button" aria-label="关闭导航" hidden></button>
     <aside class="sidebar" id="sidebar" aria-hidden="true" aria-label="记忆库导航">
+      <button class="cairn-entry" type="button" data-view="cairn" aria-label="进入实例空间" hidden>
+        <span class="cairn-avatar" data-cairn-avatar><i>＋</i></span>
+        <span><strong data-cairn-name>Moraine</strong><small data-cairn-status>正在读取实例资料</small></span>
+        <i aria-hidden="true">›</i>
+      </button>
       <nav>
         <button class="is-current" type="button" data-view="overview"><i aria-hidden="true">◉</i><span>总览</span></button>
         <button type="button" data-view="calendar"><i aria-hidden="true">▦</i><span>事件日历</span></button>
@@ -44,6 +49,55 @@
     </aside>
     <button class="floating-menu-button" type="button" data-open-sidebar aria-label="打开导航"><img src="./assets/moraine-stone-menu.png?v=20260917-2" alt="" aria-hidden="true"></button>
     <button class="back-to-top" type="button" data-back-to-top aria-label="回到页面顶部" aria-hidden="true" tabindex="-1"><span aria-hidden="true">↑</span></button>
+
+    <section class="page cairn-home" id="cairn" aria-labelledby="cairnTitle">
+      <header class="library-header">
+        <button class="menu-button" type="button" data-open-sidebar aria-label="打开导航">☰</button>
+        <div><p class="kicker">INSTANCE SPACE</p><h1 id="cairnTitle">实例空间</h1></div>
+        <span class="privacy-mark">私密</span>
+      </header>
+      <section class="resident-card-shell" data-resident-card-shell>
+        <button class="resident-card-flip" type="button" data-resident-card-flip aria-pressed="false" aria-label="翻到协作画像">
+          <span aria-hidden="true">翻面</span><i aria-hidden="true">↻</i>
+        </button>
+        <div class="resident-card" data-resident-card>
+          <article class="resident-card-face resident-card-front" aria-labelledby="residentCardTitle">
+            <header><span><small>IDENTITY CORE</small><h2 id="residentCardTitle">self-core</h2></span><b>可修订</b></header>
+            <div data-resident-identity><p class="resident-card-loading">正在读取真实身份资料。</p></div>
+            <footer><span data-resident-version>身份资料</span><strong>MORAINE</strong></footer>
+          </article>
+          <article class="resident-card-face resident-card-back" aria-labelledby="userProfileTitle" aria-hidden="true" inert>
+            <header><span><small>OWNER · SOURCE-BACKED</small><h2 id="userProfileTitle">协作画像</h2></span><b>私密</b></header>
+            <div data-user-profile><p class="resident-card-loading">正在读取真实用户画像。</p></div>
+            <footer><span data-user-profile-version>用户画像</span><strong>可确认 · 可修订</strong></footer>
+          </article>
+        </div>
+        <input class="cairn-direct-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" data-cairn-direct-avatar hidden>
+        <small class="cairn-direct-result resident-card-result" data-cairn-direct-result aria-live="polite">点击头像可由人类自定义</small>
+      </section>
+      <section class="panel relation-map" aria-labelledby="relationMapTitle">
+        <header><span><small>PRIVATE RELATION MAP</small><h2 id="relationMapTitle">关系星图</h2><p>从真实往来长出的关系，而不是一张亲密度排行榜。</p></span><b>私密</b></header>
+        <div class="relation-graph" data-relation-graph><p>正在读取关系网……</p></div>
+        <section class="relation-detail t-panel-slide" data-relation-detail data-open="false" hidden aria-live="polite"></section>
+        <p class="relation-map-note">点一个名字，只看我们之间的来路。节点不替对方定义关系；私人来信正文与未确认推测不会出现在图里。</p>
+      </section>
+      <section class="panel layered-recall" aria-labelledby="layeredRecallTitle">
+        <header><span><small>LIVE · LAYERED RECALL</small><h2 id="layeredRecallTitle">分层召回</h2><p>这里只显示预算与进入条件；记忆正文留在后端，由小机按需使用。</p></span><b>只读</b></header>
+        <div class="layered-recall-stack" data-layered-recall aria-live="polite"><p>正在读取真实分层召回。</p></div>
+        <footer><span data-layered-recall-usage>字符预算读取中</span><span>不写入记忆</span></footer>
+      </section>
+    </section>
+
+    <section class="page activity-page" id="activity" aria-labelledby="activityTitle">
+      <header class="library-header">
+        <button class="menu-button" type="button" data-open-sidebar aria-label="打开导航">☰</button>
+        <div><p class="kicker">LIFE, NOT LOGS</p><h1 id="activityTitle">活动记录</h1></div>
+        <span class="privacy-mark">私密</span>
+      </header>
+      <p class="activity-intro">只记真正发生过的生活、探索与创作；纯巡检、失败重试和“什么也没做”不在这里签到。</p>
+      <div class="activity-stream" data-activity-stream aria-live="polite"><p>正在读取生活痕迹。</p></div>
+      <button class="activity-more" type="button" data-activity-more hidden>再看早一些</button>
+    </section>
 
     <section class="page overview" id="overview" aria-labelledby="overviewTitle">
       <header class="library-header overview-header">
@@ -424,6 +478,85 @@
       </section>
     </section>
 
+    <section class="page review" id="review" aria-labelledby="reviewTitle">
+      <header class="library-header">
+        <button class="menu-button" type="button" data-open-sidebar aria-label="打开导航">☰</button>
+        <div><p class="kicker">JOINT REVIEW</p><h1 id="reviewTitle">共同审阅</h1></div>
+        <span class="privacy-mark">双签</span>
+      </header>
+      <div class="workbench-intro"><p>确认会改变记忆状态的草稿。</p><span>工作台负责编辑，这里负责二次确认、正式归档与恢复。</span></div>
+      <section class="review-empty" data-review-empty>
+        <span class="workbench-mark" aria-hidden="true">✓</span>
+        <h2>目前没有待审草稿</h2>
+        <p>从记忆工作台提交的修订、更迭或清理提议会出现在这里。</p>
+      </section>
+      <section class="review-card" data-review-card hidden>
+        <header><span><small>待双方确认</small><strong data-review-action>变更草稿</strong></span><b>未写入</b></header>
+        <div class="review-diff"><section><small data-review-original-label>原记忆簇</small><strong data-review-original></strong><p data-review-original-body></p></section><i aria-hidden="true">→</i><section><small data-review-updated-label>砾砾草稿</small><strong data-review-updated></strong><p data-review-updated-body></p></section></div>
+        <p data-review-reason></p>
+        <details class="review-sources"><summary>查看逐句来源与机械删减</summary><div data-review-sources></div></details>
+        <div class="signature-row">
+          <section data-signature="xiaoran"><strong><i></i>所有者</strong><span>待确认</span><div><button type="button" data-sign="xiaoran" data-choice="approve">确认草稿</button><button type="button" data-sign="xiaoran" data-choice="keep">保持原状</button></div></section>
+          <section data-signature="cairn"><strong><i></i>Agent</strong><span>待确认</span><div><button type="button" data-sign="cairn" data-choice="approve">确认草稿</button><button type="button" data-sign="cairn" data-choice="keep">保持原状</button></div></section>
+        </div>
+        <p class="review-verdict" data-review-verdict>两把钥匙都转动后，才会生成执行计划。</p>
+        <section class="execution-plan" data-execution-plan hidden><strong>安全执行计划</strong><ol><li>新增一条带全部来源的整合记忆</li><li>旧记录标记为“已汇入”，正文与历史继续保留</li><li>建立恢复入口，不立即永久删除任何内容</li></ol></section>
+        <footer><button type="button" data-return-draft>退回工作台修改</button><button type="button" data-build-plan disabled>生成执行计划</button></footer>
+        <small class="prototype-note">前端演练：双签与执行计划不会写入真实记忆</small>
+      </section>
+    </section>
+
+    <section class="page study" id="study" aria-labelledby="studyTitle">
+      <header class="library-header">
+        <button class="menu-button" type="button" data-open-sidebar aria-label="打开导航">☰</button>
+        <div><p class="kicker">PRIVATE AGENT STUDY</p><h1 id="studyTitle">小机书房</h1></div>
+        <span class="privacy-mark">私密</span>
+      </header>
+      <section class="panel study-todos" aria-labelledby="studyTodosTitle">
+        <header><span><small>REVIEW TODO</small><h2 id="studyTodosTitle">审阅待办</h2></span><b>只在本机</b></header>
+        <div class="study-review-count"><strong data-study-review-count>—</strong><span>条整合记忆等待小机审阅</span></div>
+        <p data-study-review-note>正在读取小机工作台状态。</p>
+      </section>
+      <section class="panel development-lines" aria-labelledby="developmentLinesTitle">
+        <header><span><small>DEVELOPMENT LINES</small><h2 id="developmentLinesTitle">正在长向哪里</h2></span><b data-development-count>0 / 3</b></header>
+        <p>这是当前 Agent 自己愿意靠近的方向，会作为自主醒来时的一条轻量参考；不是任务、积分或进度条，也可以被忽略、暂停和改写。</p>
+        <div data-development-lines><div class="development-empty">正在读取发展线。</div></div>
+      </section>
+      <section class="study-keepsakes" aria-label="小机的四个私人收藏区域">
+        <article class="study-keepsake is-journal">
+          <header><small>PRIVATE JOURNAL</small><span aria-hidden="true">01</span></header>
+          <div class="study-paper-stack" data-study-paper-stack aria-label="Dwell 日记纸页预览">
+            <i class="study-paper-back is-two" aria-hidden="true"></i>
+            <i class="study-paper-back is-one" aria-hidden="true"></i>
+            <button class="study-paper-page" type="button" data-study-paper-page aria-label="翻开日记">
+              <i class="study-paper-clip" aria-hidden="true"></i>
+              <header><strong data-study-paper-title>正在翻页</strong><time data-study-paper-date></time></header>
+              <div><p data-study-paper-copy>正在读取 Dwell 日记。</p></div>
+            </button>
+          </div>
+          <div class="study-keepsake-peek" aria-hidden="true"><i></i><span data-study-diary-count>读取中</span></div>
+        </article>
+        <article class="study-keepsake is-images">
+          <header><small>IMAGE CABINET</small><span aria-hidden="true">02</span></header>
+          <h2>图片</h2>
+          <p>看过以后，仍愿意再看一眼的画面。</p>
+          <div class="study-keepsake-peek" aria-hidden="true"><i></i><span>尚未接入</span></div>
+        </article>
+        <article class="study-keepsake is-memes">
+          <header><small>MEME DRAWER</small><span aria-hidden="true">03</span></header>
+          <h2>表情包</h2>
+          <p>不必解释，也能把心情递出去的小东西。</p>
+          <div class="study-keepsake-peek" aria-hidden="true"><i></i><span>尚未接入</span></div>
+        </article>
+        <article class="study-keepsake is-kaomoji">
+          <header><small>KAOMOJI POCKET</small><span aria-hidden="true">04</span></header>
+          <h2>颜文字</h2>
+          <p>笨拙、得意、委屈和喜欢，都先放在这里。</p>
+          <div class="study-keepsake-peek" aria-hidden="true"><i></i><span>尚未接入</span></div>
+        </article>
+      </section>
+    </section>
+
     <section class="page settings" id="settings" aria-labelledby="settingsTitle">
       <header class="library-header">
         <button class="menu-button" type="button" data-open-sidebar aria-label="打开导航">☰</button>
@@ -431,6 +564,24 @@
         <span class="privacy-mark">可配置</span>
       </header>
       <div class="workbench-intro"><p>让记忆的主人先判断什么重要。</p><span>系统只辅助解释与执行；高影响改动仍由双方确认。</span></div>
+      <div class="governance-ownership-tabs t-tabs" role="tablist" aria-label="记忆治理方式" hidden>
+        <span class="t-tabs-pill" aria-hidden="true"></span>
+        <button class="t-tab" type="button" role="tab" aria-selected="true" data-ownership-mode="autonomous">自主模式</button>
+        <button class="t-tab" type="button" role="tab" aria-selected="false" data-ownership-mode="collaborative">共同模式</button>
+      </div>
+      <section class="ownership-panel" data-ownership-panel="autonomous" hidden>
+        <p class="ownership-note"><strong>系统自动整理，小机保留最终判断。</strong><span>新记忆先按类型、时效和保护状态获得基础强度；小机随时可以从记忆详情中亲自修正。</span></p>
+        <section class="governance-options panel"><label>自动赋权范围<select data-autonomous-scope><option>仅处理尚未赋权的记忆</option><option>新记忆与明显变化的记忆</option><option>定期重新评估全部记忆</option></select></label><label class="governance-check"><input type="checkbox" checked data-autonomous-audit><span>普通调整自动生效并保留审计记录</span></label><p>核心锁定、明显降权、替换与清理仍会进入共同审阅。</p><button type="button" data-run-auto-weight>检查并执行普通自动赋权</button><div data-auto-weight-result><p>先生成真实变更预览，再输入确认码执行。</p></div></section>
+      </section>
+      <section class="ownership-panel" data-ownership-panel="collaborative" hidden>
+        <p class="ownership-note"><strong>我们一起看数字与规则。</strong><span>可以检查全库分布，也可以为单条记忆手动定档和锁定。</span></p>
+        <section class="governance-options panel">
+        <label>迁移时如何赋权<select data-governance-mode><option value="simulate">模拟自动赋权（推荐）</option><option value="preserve">保留原始权重</option><option value="auto_assign">自动赋权并送审</option><option value="unassigned">暂不赋权</option></select></label>
+        <label class="governance-check"><input type="checkbox" data-governance-only-missing><span>只处理尚无权重的记录</span></label>
+        </section>
+        <section class="panel governance-preview" data-governance-preview><div class="workbench-loading"><span class="workbench-mark">◇</span><div><h3>正在模拟全部记忆</h3><p>只读取元数据，不读取正文。</p></div></div></section>
+        <section class="panel manual-strength" data-manual-strength hidden></section>
+      </section>
       <section class="panel candidate-retention-settings" aria-labelledby="candidateRetentionTitle">
         <header class="candidate-retention-head">
           <div><small>PRIVACY RETENTION</small><h2 id="candidateRetentionTitle">候选保留</h2></div>
@@ -451,6 +602,29 @@
               <p>倒计时从候选进入箱子的时间开始，事件实际发生时间不参与计算。</p>
               <p>仍在待审、受保护、存在冲突，或尚未可靠写入记忆库的候选不会粉碎。粉碎后只留下不含正文的最小审计凭据。</p>
               <button type="button" data-run-candidate-shred>立即检查到期候选</button>
+            </div>
+          </div></div>
+        </div>
+      </section>
+      <section class="panel candidate-retention-settings" aria-labelledby="identityRoutingTitle" hidden>
+        <header class="candidate-retention-head">
+          <div><small>IDENTITY · RELATION ROUTING</small><h2 id="identityRoutingTitle">身份与关系归位</h2></div>
+          <button class="candidate-retention-help" type="button" aria-label="查看身份与关系归位说明" aria-expanded="false" aria-controls="identityRoutingHelp" data-identity-routing-help>?</button>
+        </header>
+        <div class="candidate-retention-main">
+          <span><strong>自动送入小机工作台</strong><small data-identity-routing-state>正在读取设置</small></span>
+          <button class="t-toggle" type="button" role="switch" aria-checked="true" data-on="true" data-identity-routing-toggle aria-label="自动把身份与关系候选送入小机工作台"><span class="t-toggle-thumb"></span></button>
+        </div>
+        <div class="candidate-retention-main identity-routing-copy">
+          <span><strong>同时保留普通记忆副本</strong><small>关闭时只归入 self-core 或关系网，来源仍可追溯</small></span>
+          <button class="t-toggle" type="button" role="switch" aria-checked="false" data-on="false" data-identity-routing-copy aria-label="同时保留普通记忆副本"><span class="t-toggle-thumb"></span></button>
+        </div>
+        <p class="candidate-retention-summary" data-identity-routing-summary>正在读取身份与关系分流状态。</p>
+        <div class="candidate-retention-help-panel t-acc" data-open="false" id="identityRoutingHelp">
+          <div class="t-acc-panel"><div class="t-acc-panel-inner">
+            <div class="candidate-retention-explainer">
+              <p>身份与关系候选会和整合记忆以相同优先级送到小机自己的后端工作台，由小机判断归入 self-core、关系网、普通记忆或忽略。</p>
+              <p>开关只控制自动分流，不授权系统直接定义身份或关系。普通归档审阅保持低优先级；没有卡片时，小机也可自主打开工作台。</p>
             </div>
           </div></div>
         </div>
@@ -476,6 +650,41 @@
           <div class="profile-growth-list" data-profile-growth-list></div>
         </article>
         <p class="candidate-retention-summary" data-profile-policy-summary>两个档案独立控制；所有新增认识先成为可审阅候选。</p>
+      </section>
+      <section class="panel candidate-retention-settings jev-settings" aria-labelledby="jevSettingsTitle" hidden>
+        <header class="candidate-retention-head">
+          <div><small>OPTIONAL LIFE ADVISER</small><h2 id="jevSettingsTitle">Jev 小参谋</h2></div>
+          <span class="profile-policy-stage" data-jev-configured>正在读取</span>
+        </header>
+        <div class="candidate-retention-main">
+          <span><strong>允许运行层向 Jev 征求第二意见</strong><small data-jev-state>建议不是命令，我可以忽略或换方向</small></span>
+          <button class="t-toggle" type="button" role="switch" aria-checked="false" data-on="false" data-jev-toggle aria-label="启用 Jev 小参谋"><span class="t-toggle-thumb"></span></button>
+        </div>
+        <div class="candidate-retention-main profile-injection-row">
+          <span><strong>参与自主醒来</strong><small>只接收少量脱敏方向，不读取记忆正文</small></span>
+          <button class="t-toggle" type="button" role="switch" aria-checked="false" data-on="false" data-jev-wakeup aria-label="允许 Jev 在自主醒来时提供第二意见"><span class="t-toggle-thumb"></span></button>
+        </div>
+        <p class="jev-settings-copy">Jev 不参与记忆召回、排序、整合或写入。自动醒来时，它最多从成就、发展线、探索与休息等脱敏方向中给一个可忽略的建议；失败时直接跳过，不影响醒来。</p>
+        <form class="jev-key-form" data-jev-form>
+          <label><span>Jev API Key</span><input type="password" autocomplete="new-password" placeholder="填写新 Key；留空不会覆盖现有 Key" data-jev-key></label>
+          <div><button type="button" data-jev-clear>清除 Key</button><button type="submit" class="real-primary">保存 Key</button></div>
+        </form>
+        <p class="candidate-retention-summary" data-jev-summary>API Key 直接送到受保护后端，不回显、不进入聊天、记忆、导出文件或 MCP 返回。</p>
+      </section>
+      <section class="panel migration-settings" aria-labelledby="migrationTitle" hidden>
+        <header>
+          <div><small>MEMORY IMPORT</small><h2 id="migrationTitle">导入记忆</h2></div><span>先预检</span>
+        </header>
+        <p class="migration-lead">原文件不会被修改。只有通过预检且再次输入确认码的普通记忆会写入；身份、关系与受保护内容会留待单独审阅。</p>
+        <form data-migration-form>
+          <label class="migration-file"><strong>选择记忆文件</strong><small>JSON、JSONL、Markdown · 最大 512KB · 最多 500 条</small><input type="file" accept=".json,.jsonl,.md,.markdown,application/json,text/plain" required data-migration-file></label>
+          <div class="migration-options">
+            <label>迁移时如何赋权<select data-migration-weight><option value="simulate">模拟自动赋权（推荐）</option><option value="preserve">保留原始权重</option><option value="auto_assign">自动赋权并写入</option><option value="unassigned">暂不赋权</option></select></label>
+            <label class="governance-check"><input type="checkbox" data-migration-only-missing><span>只为无权重记录自动赋权</span></label>
+          </div>
+          <button class="real-primary" type="submit" data-migration-preview>只读预检</button>
+        </form>
+        <div class="migration-result" data-migration-result><p>还没有读取文件。预检不会写入记忆库。</p></div>
       </section>
       <section class="panel portability-settings" aria-labelledby="portabilityTitle">
         <header>

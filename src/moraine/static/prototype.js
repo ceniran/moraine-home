@@ -2418,6 +2418,7 @@
     if (!confirm('清除保存的 Jev API Key，并停止调用小参谋？')) return;
     saveJevSettings({ clear_api_key: true }, [event.currentTarget]);
   });
+  loadJevSettings();
   async function loadCandidates() {
     try {
       const response = await fetch('/moraine-beta/api/dwell-v2/candidates', { cache: 'no-store' });
@@ -2601,6 +2602,7 @@
     });
     closeSidebar();
     updateBackToTop();
+    if (next === 'activity') loadActivities();
     if (next === 'library') window.setTimeout(() => librarySearch.focus(), 180);
   }
 
@@ -2947,7 +2949,9 @@
   loadOverview();
   loadCalendar();
   loadCandidates();
+  if (!document.querySelector('[aria-labelledby="identityRoutingTitle"]')?.hidden) loadIdentityRoutingPolicy();
   loadArchiveMemories();
+  if (!document.querySelector('[data-governance-preview]')?.closest('[hidden]')) loadGovernancePreview();
   loadMemoryFlow();
   document.querySelector('[data-revision-memory]')?.addEventListener('change', async event => {
     const result = document.querySelector('[data-revision-result]');
@@ -2983,7 +2987,7 @@
       wireActionConfirmation(result, preview, loadReadOnlyMemories);
     } catch (error) { result.innerHTML = `<p>没有执行：${escapeHtml(error.message)}</p>`; }
   });
-  document.querySelector('[data-governance-preview]')?.addEventListener('click', (event) => {
+  document.querySelector('[data-governance-preview]').addEventListener('click', (event) => {
     const trigger = event.target.closest('[data-manual-memory]');
     if (!trigger) return;
     const panel = document.querySelector('[data-manual-strength]');
@@ -3009,8 +3013,8 @@
     });
     panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
-  document.querySelector('[data-governance-mode]')?.addEventListener('change', loadGovernancePreview);
-  document.querySelector('[data-governance-only-missing]')?.addEventListener('change', loadGovernancePreview);
+  document.querySelector('[data-governance-mode]').addEventListener('change', loadGovernancePreview);
+  document.querySelector('[data-governance-only-missing]').addEventListener('change', loadGovernancePreview);
   document.querySelector('#library').addEventListener('click', async (event) => {
     const workbenchTrigger = event.target.closest('[data-add-to-workbench]');
     if (workbenchTrigger) {
@@ -3519,6 +3523,9 @@
   if (initialWorkbenchStep) {
     workbenchTabs.find((tab) => tab.dataset.workbenchStep === initialWorkbenchStep)?.click();
   }
+  loadCairnProfile();
+  loadRelationMap();
+  loadLayeredRecall();
   loadSnapshots();
   requestAnimationFrame(() => moveArrangementPill(arrangementButtons[0], false));
   requestAnimationFrame(() => moveWorkbenchPill(workbenchTabs[0], false));
