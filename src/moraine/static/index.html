@@ -39,7 +39,10 @@
         <button type="button" data-view="candidates"><i aria-hidden="true">◌</i><span>候选箱</span></button>
         <button type="button" data-view="library"><i aria-hidden="true">▱</i><span>记忆库</span></button>
         <button type="button" data-view="workbench"><i aria-hidden="true">◇</i><span>记忆工作台</span></button>
+        <button type="button" data-view="review"><i aria-hidden="true">✓</i><span>共同审阅</span></button>
         <button type="button" data-view="archive"><i aria-hidden="true">□</i><span>归档</span></button>
+        <button type="button" data-view="activity"><i aria-hidden="true">◔</i><span>活动记录</span></button>
+        <button type="button" data-view="study"><i aria-hidden="true">▤</i><span>小机书房</span></button>
       </nav>
       <footer>
         <button type="button" data-view="settings"><i aria-hidden="true">≡</i><span>设置</span></button>
@@ -502,7 +505,7 @@
         <p class="review-verdict" data-review-verdict>两把钥匙都转动后，才会生成执行计划。</p>
         <section class="execution-plan" data-execution-plan hidden><strong>安全执行计划</strong><ol><li>新增一条带全部来源的整合记忆</li><li>旧记录标记为“已汇入”，正文与历史继续保留</li><li>建立恢复入口，不立即永久删除任何内容</li></ol></section>
         <footer><button type="button" data-return-draft>退回工作台修改</button><button type="button" data-build-plan disabled>生成执行计划</button></footer>
-        <small class="prototype-note">前端演练：双签与执行计划不会写入真实记忆</small>
+        <small class="prototype-note">双方确认后仍需输入六位确认码，才会通过后端写入并保留审计与回退信息。</small>
       </section>
     </section>
 
@@ -564,12 +567,12 @@
         <span class="privacy-mark">可配置</span>
       </header>
       <div class="workbench-intro"><p>让记忆的主人先判断什么重要。</p><span>系统只辅助解释与执行；高影响改动仍由双方确认。</span></div>
-      <div class="governance-ownership-tabs t-tabs" role="tablist" aria-label="记忆治理方式" hidden>
+      <div class="governance-ownership-tabs t-tabs" role="tablist" aria-label="记忆治理方式">
         <span class="t-tabs-pill" aria-hidden="true"></span>
         <button class="t-tab" type="button" role="tab" aria-selected="true" data-ownership-mode="autonomous">自主模式</button>
         <button class="t-tab" type="button" role="tab" aria-selected="false" data-ownership-mode="collaborative">共同模式</button>
       </div>
-      <section class="ownership-panel" data-ownership-panel="autonomous" hidden>
+      <section class="ownership-panel" data-ownership-panel="autonomous">
         <p class="ownership-note"><strong>系统自动整理，小机保留最终判断。</strong><span>新记忆先按类型、时效和保护状态获得基础强度；小机随时可以从记忆详情中亲自修正。</span></p>
         <section class="governance-options panel"><label>自动赋权范围<select data-autonomous-scope><option>仅处理尚未赋权的记忆</option><option>新记忆与明显变化的记忆</option><option>定期重新评估全部记忆</option></select></label><label class="governance-check"><input type="checkbox" checked data-autonomous-audit><span>普通调整自动生效并保留审计记录</span></label><p>核心锁定、明显降权、替换与清理仍会进入共同审阅。</p><button type="button" data-run-auto-weight>检查并执行普通自动赋权</button><div data-auto-weight-result><p>先生成真实变更预览，再输入确认码执行。</p></div></section>
       </section>
@@ -606,7 +609,7 @@
           </div></div>
         </div>
       </section>
-      <section class="panel candidate-retention-settings" aria-labelledby="identityRoutingTitle" hidden>
+      <section class="panel candidate-retention-settings" aria-labelledby="identityRoutingTitle">
         <header class="candidate-retention-head">
           <div><small>IDENTITY · RELATION ROUTING</small><h2 id="identityRoutingTitle">身份与关系归位</h2></div>
           <button class="candidate-retention-help" type="button" aria-label="查看身份与关系归位说明" aria-expanded="false" aria-controls="identityRoutingHelp" data-identity-routing-help>?</button>
@@ -651,7 +654,7 @@
         </article>
         <p class="candidate-retention-summary" data-profile-policy-summary>两个档案独立控制；所有新增认识先成为可审阅候选。</p>
       </section>
-      <section class="panel candidate-retention-settings jev-settings" aria-labelledby="jevSettingsTitle" hidden>
+      <section class="panel candidate-retention-settings jev-settings" aria-labelledby="jevSettingsTitle">
         <header class="candidate-retention-head">
           <div><small>OPTIONAL LIFE ADVISER</small><h2 id="jevSettingsTitle">Jev 小参谋</h2></div>
           <span class="profile-policy-stage" data-jev-configured>正在读取</span>
@@ -671,7 +674,7 @@
         </form>
         <p class="candidate-retention-summary" data-jev-summary>API Key 直接送到受保护后端，不回显、不进入聊天、记忆、导出文件或 MCP 返回。</p>
       </section>
-      <section class="panel migration-settings" aria-labelledby="migrationTitle" hidden>
+      <section class="panel migration-settings" aria-labelledby="migrationTitle">
         <header>
           <div><small>MEMORY IMPORT</small><h2 id="migrationTitle">导入记忆</h2></div><span>先预检</span>
         </header>

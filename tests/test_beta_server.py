@@ -131,6 +131,26 @@ class BetaServerTest(unittest.TestCase):
         self.assertEqual(self.request("/api/dwell-v2/identity-relation-routing-policy")[1]["policy"], policy)
         self.assertIn("configured", self.request("/api/dwell-v2/jev-settings")[1]["settings"])
 
+    def test_remaining_frontend_contracts_are_real(self):
+        thread = self.request("/api/dwell-v2/experience-threads/moraine-project-progress")[1]
+        self.assertFalse(thread["persisted"])
+        preview = self.request("/api/dwell-v2/migration/preview", "POST", {
+            "filename": "memory.json", "content": json.dumps([{"title": "迁入测试", "content": "真实迁入正文"}])
+        })[1]
+        self.assertEqual(preview["preview"]["counts"]["ready"], 1)
+        migrated = self.request("/api/dwell-v2/migration/execute", "POST", {
+            "draft_id": preview["draft_id"], "confirmation_code": preview["confirmation_code"]
+        })[1]
+        self.assertEqual(migrated["imported"], 1)
+        snapshot = self.request("/api/dwell-v2/portability/snapshots", "POST", {"label": "恢复测试"})[1]["snapshot"]
+        self.assertIn("checksum", snapshot)
+        restore = self.request(f"/api/dwell-v2/portability/snapshots/{snapshot['id']}/restore-preview", "POST", {})[1]
+        self.assertFalse(restore["persisted"])
+        restored = self.request("/api/dwell-v2/portability/restore-execute", "POST", {
+            "draft_id": restore["draft_id"], "confirmation_code": restore["confirmation_code"]
+        })[1]
+        self.assertTrue(restored["ok"])
+
     def test_public_workbench_core_adapters(self):
         self.assertEqual(self.request("/api/dwell-v2/queue")[1]["queue"]["deferred_source_ids"], [])
         queue = self.request("/api/dwell-v2/queue", "POST", {
@@ -207,6 +227,10 @@ class BetaServerTest(unittest.TestCase):
         script = (Path(__file__).parents[1] / "src" / "moraine" / "static" / "prototype.js").read_text(encoding="utf-8")
         self.assertIn('class="cairn-entry" type="button" data-view="cairn" aria-label="进入实例空间">', index)
         self.assertIn("['cairn', 'calendar', 'candidates'", script)
+        for view in ('review', 'activity', 'study'):
+            self.assertIn(f'data-view="{view}"', index)
+        self.assertIn("'review', 'activity', 'study'", script)
+        self.assertNotIn('aria-labelledby="migrationTitle" hidden', index)
 
     def test_dwell_v2_read_only_adapter_contracts(self):
         overview = self.request("/api/dwell-v2/overview")[1]

@@ -2595,7 +2595,7 @@
   });
 
   function showView(view) {
-    const next = ['cairn', 'calendar', 'candidates', 'library', 'archive', 'workbench', 'settings'].includes(view) ? view : 'overview';
+    const next = ['cairn', 'calendar', 'candidates', 'library', 'archive', 'workbench', 'review', 'activity', 'study', 'settings'].includes(view) ? view : 'overview';
     prototype.dataset.view = next;
     document.querySelectorAll('[data-view]').forEach((button) => {
       button.classList.toggle('is-current', button.dataset.view === next);
@@ -2603,6 +2603,7 @@
     closeSidebar();
     updateBackToTop();
     if (next === 'activity') loadActivities();
+    if (next === 'study') loadStudyDiary();
     if (next === 'library') window.setTimeout(() => librarySearch.focus(), 180);
   }
 
@@ -3297,6 +3298,7 @@
   const renderSnapshots = snapshots => {
     snapshotList.innerHTML = snapshots.length ? snapshots.map(snapshot => `<article class="snapshot-card">
       <span><strong>${escapeHtml(snapshot.label)}</strong><small>${escapeHtml(new Date(snapshot.created_at).toLocaleString('zh-CN'))} · ${Number(snapshot.memories || 0)} 条记忆 · ${Number(snapshot.candidates || 0)} 条候选</small></span>
+      <button type="button" data-preview-snapshot="${escapeHtml(snapshot.id)}">预览安全恢复</button>
       <div data-snapshot-impact="${escapeHtml(snapshot.id)}"></div></article>`).join('') : '<p>还没有私有快照。</p>';
   };
   const loadSnapshots = async () => {

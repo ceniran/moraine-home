@@ -278,7 +278,13 @@ def create_beta_server(env: dict[str, str] | None = None):
                                       "visibility": "private"})
                     return self._json(200, {"ok": True, "items": items})
                 if parsed.path == "/api/dwell-v2/diary":
-                    return self._json(200, {"ok": True, "items": []})
+                    notes = [row for row in store.list_memories("active")
+                             if str(row.get("kind") or "").casefold() in {"reflection", "note", "diary"}]
+                    return self._json(200, {"ok": True, "items": [
+                        {"id": row.get("id"), "title": row.get("title"), "content": row.get("content"),
+                         "type": row.get("kind", "note"), "author": "shared",
+                         "createdAt": row.get("created_at"), "updatedAt": row.get("updated_at")}
+                        for row in notes]})
                 if parsed.path == "/api/dwell-v2/governance":
                     rows = store.list_memories("active")
                     bands = {"短暂": 0, "普通": 0, "稳定": 0, "重要": 0, "核心": 0}
@@ -301,6 +307,11 @@ def create_beta_server(env: dict[str, str] | None = None):
                         "retain_memory_copy": settings.get("retain_identity_memory_copy", False)}})
                 if parsed.path == "/api/dwell-v2/jev-settings":
                     return self._json(200, {"ok": True, "settings": adviser.public()})
+                if parsed.path.startswith("/api/dwell-v2/experience-threads/"):
+                    memories = store.list_memories("active")
+                    return self._json(200, {"ok": True, "persisted": False,
+                                            "thread": {"id": parsed.path.rsplit("/", 1)[-1],
+                                                       "title": "项目发展线", "items": memories[:12]}})
                 if parsed.path == "/api/dwell-v2/reflections":
                     return self._json(200, {"ok": True, "reflections": []})
                 if parsed.path == "/api/dwell-v2/candidates":
@@ -594,6 +605,85 @@ def create_beta_server(env: dict[str, str] | None = None):
                 if parsed.path == "/api/dwell-v2/portability/snapshots":
                     return self._json(201, {"ok": True, "snapshot": store.create_snapshot(
                         str(body.get("label") or "manual"))})
+                if parsed.path.startswith("/api/dwell-v2/portability/snapshots/") and parsed.path.endswith("/restore-preview"):
+                    snapshot_id = parsed.path.split("/")[-2]
+                    target = store.snapshots_path / f"{snapshot_id}.json"
+                    if not target.is_file():
+                        raise KeyError(snapshot_id)
+                    snapshot_payload = json.loads(target.read_text(encoding="utf-8"))
+                    current = store.snapshot()
+                    current_ids = {row.get("id") for row in current.get("memories") or []}
+                    target_ids = {row.get("id") for row in snapshot_payload.get("memories") or []}
+                    draft_id = "snapshot_restore_" + secrets.token_hex(8)
+                    confirmation_code = f"{secrets.randbelow(1000000):06d}"
+                    action_drafts[draft_id] = {"action": "snapshot_restore", "snapshot_id": snapshot_id,
+                                               "confirmation_code": confirmation_code}
+                    return self._json(200, {"ok": True, "persisted": False, "draft_id": draft_id,
+                                            "confirmation_code": confirmation_code,
+                                            "impact": {"changed": len(current_ids & target_ids),
+                                                       "missing": len(target_ids - current_ids), "held": 0,
+                                                       "newer_preserved": len(current_ids - target_ids)}})
+                if parsed.path == "/api/dwell-v2/portability/restore-execute":
+                    draft = action_drafts.get(str(body.get("draft_id") or ""))
+                    if not draft or draft.get("action") != "snapshot_restore":
+                        raise ValueError("snapshot_restore_draft_not_found")
+                    if not hmac.compare_digest(str(body.get("confirmation_code") or ""), draft["confirmation_code"]):
+                        raise ValueError("confirmation_code_mismatch")
+                    before = store.snapshot()
+                    result = store.restore_snapshot(draft["snapshot_id"])
+                    action_drafts.pop(str(body.get("draft_id")), None)
+                    return self._json(200, {"ok": True, "restored": result.get("active", 0), "recreated": 0,
+                                            "newer_preserved": 0, "before_count": len(before.get("memories") or [])})
+                if parsed.path == "/api/dwell-v2/migration/preview":
+                    content = str(body.get("content") or "")
+                    filename = str(body.get("filename") or "")
+                    rows = []
+                    try:
+                        parsed_content = json.loads(content)
+                        values = parsed_content if isinstance(parsed_content, list) else parsed_content.get("memories", [])
+                        for index, value in enumerate(values[:500]):
+                            if not isinstance(value, dict):
+                                rows.append({"index": index, "status": "invalid", "warnings": ["不是对象"]})
+                                continue
+                            rows.append({"index": index, "status": "ready", "title": str(value.get("title") or f"导入记忆 {index + 1}"),
+                                         "content": str(value.get("content") or value.get("text") or ""),
+                                         "kind": str(value.get("kind") or "event"), "tags": value.get("tags") or []})
+                    except (ValueError, TypeError, AttributeError):
+                        if filename.lower().endswith((".md", ".markdown")) and content.strip():
+                            rows = [{"index": 0, "status": "ready", "title": Path(filename).stem or "导入记忆",
+                                     "content": content.strip(), "kind": "event", "tags": ["imported"]}]
+                        else:
+                            rows = [{"index": 0, "status": "invalid", "title": filename,
+                                     "warnings": ["无法解析 JSON、JSONL 或 Markdown"]}]
+                    ready = [row for row in rows if row.get("status") == "ready" and row.get("content")]
+                    for row in rows:
+                        if row.get("status") == "ready" and not row.get("content"):
+                            row["status"], row["warnings"] = "invalid", ["正文为空"]
+                    ready = [row for row in rows if row.get("status") == "ready"]
+                    draft_id = "migration_" + secrets.token_hex(8)
+                    confirmation_code = f"{secrets.randbelow(1000000):06d}"
+                    action_drafts[draft_id] = {"action": "migration", "rows": ready,
+                                               "confirmation_code": confirmation_code}
+                    counts = {key: sum(row.get("status") == key for row in rows)
+                              for key in ("ready", "duplicate", "held", "invalid")}
+                    return self._json(200, {"ok": True, "persisted": False, "draft_id": draft_id,
+                                            "confirmation_code": confirmation_code,
+                                            "preview": {"counts": counts, "rows": rows}})
+                if parsed.path == "/api/dwell-v2/migration/execute":
+                    draft = action_drafts.get(str(body.get("draft_id") or ""))
+                    if not draft or draft.get("action") != "migration":
+                        raise ValueError("migration_draft_not_found")
+                    if not hmac.compare_digest(str(body.get("confirmation_code") or ""), draft["confirmation_code"]):
+                        raise ValueError("confirmation_code_mismatch")
+                    imported = []
+                    for row in draft["rows"]:
+                        candidate = store.add_candidate({"title": row["title"], "content": row["content"],
+                                                         "kind": row["kind"], "tags": row.get("tags") or []})
+                        imported.append(store.admit([candidate["id"]]))
+                    action_drafts.pop(str(body.get("draft_id")), None)
+                    rollback_until = max((row.get("rollback", {}).get("available_until", "") for row in imported), default="")
+                    return self._json(200, {"ok": True, "imported": len(imported),
+                                            "rollback": {"available_until": rollback_until}})
                 if parsed.path.startswith("/api/dwell-v2/rollbacks/"):
                     return self._json(200, store.rollback_candidate_admission(parsed.path.rsplit("/", 1)[-1]))
                 if parsed.path == "/api/recall/layered":

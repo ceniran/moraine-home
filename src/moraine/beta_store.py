@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import re
 import threading
@@ -1028,7 +1029,10 @@ class BetaStore:
     def create_snapshot(self, label: str = "manual") -> dict:
         snapshot_id = f"snapshot-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{uuid.uuid4().hex[:8]}"
         payload = self.snapshot()
-        payload["snapshot_meta"] = {"id": snapshot_id, "label": str(label).strip()[:120] or "manual", "created_at": utc_now()}
+        checksum = hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
+        payload["snapshot_meta"] = {"id": snapshot_id, "label": str(label).strip()[:120] or "manual",
+                                    "created_at": utc_now(), "count": len(payload.get("memories") or []),
+                                    "checksum": checksum}
         target = self.snapshots_path / f"{snapshot_id}.json"
         _atomic_write(target, payload)
         return deepcopy(payload["snapshot_meta"])
