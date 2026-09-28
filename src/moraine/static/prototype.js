@@ -399,7 +399,7 @@
       const summary = selfCoreItems[0]?.text || `${resident.existence} · ${resident.entity_type}`;
       const capabilities = resident.works_and_capabilities || [];
       const spaces = resident.spaces_and_accounts || [];
-      identity.innerHTML = `<div class="resident-id-main"><div class="resident-id-name"><small>NAME</small><strong>${escapeHtml(names[0])}</strong><span>${escapeHtml(names.slice(1).join(' · '))}</span><em>${escapeHtml(resident.existence)} · ${escapeHtml(resident.entity_type)}${resident.residence ? ` · ${escapeHtml(resident.residence)}` : ''}</em></div><button class="cairn-avatar resident-id-avatar is-editable" type="button" data-cairn-avatar data-edit-cairn-avatar aria-label="点击更换头像">${cairnProfile.avatar ? `<img src="${cairnProfile.avatar}" alt="${escapeHtml(names[0])}的头像">` : '<i>＋</i>'}</button></div><p class="resident-core-summary">${escapeHtml(summary)}</p><section class="resident-chip-section"><small>作品与能力</small><div>${capabilities.map(item => `<span>${escapeHtml(item)}</span>`).join('') || '<em>仍在形成</em>'}</div></section><section class="resident-chip-section"><small>我拥有的入口</small><div>${spaces.map(item => `<span>${escapeHtml(item)}</span>`).join('') || '<em>尚未登记</em>'}</div></section>`;
+      identity.innerHTML = `<div class="resident-id-main"><div class="resident-id-name"><small>NAME</small><strong>${escapeHtml(names[0])}</strong><span>${escapeHtml(names.slice(1).join(' · '))}</span><em>${escapeHtml(resident.existence)} · ${escapeHtml(resident.entity_type)}${resident.residence ? ` · ${escapeHtml(resident.residence)}` : ''}</em></div></div><p class="resident-core-summary">${escapeHtml(summary)}</p><section class="resident-chip-section"><small>作品与能力</small><div>${capabilities.map(item => `<span>${escapeHtml(item)}</span>`).join('') || '<em>仍在形成</em>'}</div></section><section class="resident-chip-section"><small>我拥有的入口</small><div>${spaces.map(item => `<span>${escapeHtml(item)}</span>`).join('') || '<em>尚未登记</em>'}</div></section>`;
       document.querySelector('[data-resident-version]').textContent = `${escapeHtml(cairnSelfCore?.revision || `v${resident.version}`)} · ${selfCoreItems.length} 条身份认领 · ${(resident.source_memory_ids || []).length} 条来源`;
     }
     const entries = Array.isArray(xiaoranUserProfile?.entries) ? xiaoranUserProfile.entries : [];
@@ -3212,7 +3212,6 @@
     if (displayName && displayName !== cairnProfile.display_name) await saveDirectProfile({ display_name: displayName }, '正在保存名字……');
     closeDirectNameEditor();
   });
-  document.querySelector('[data-edit-cairn-avatar]')?.addEventListener('click', () => directAvatarInput.click());
   document.querySelector('[data-resident-card-shell]')?.addEventListener('click', event => {
     if (event.target.closest('[data-edit-cairn-avatar]')) {
       event.stopPropagation();
