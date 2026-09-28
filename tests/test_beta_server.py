@@ -105,6 +105,18 @@ class BetaServerTest(unittest.TestCase):
         })[1]["candidate"]
         self.assertEqual(decided["state"], "approved")
         self.assertEqual(self.request("/api/user-profile")[1]["items"][0]["text"], "用户希望先给结论")
+
+    def test_settings_page_retention_and_snapshot_adapters(self):
+        policy = self.request("/api/dwell-v2/candidate-shred-policy", "POST", {
+            "enabled": True, "retention_hours": 48
+        })[1]["policy"]
+        self.assertEqual(policy, {"enabled": True, "retention_hours": 48})
+        self.assertEqual(self.request("/api/dwell-v2/candidate-shred-policy")[1]["policy"], policy)
+        snapshot = self.request("/api/dwell-v2/portability/snapshots", "POST", {
+            "label": "设置页合成快照"
+        })[1]["snapshot"]
+        self.assertEqual(self.request("/api/dwell-v2/portability/snapshots")[1]["snapshots"][0]["id"], snapshot["id"])
+        self.assertEqual(self.request("/api/dwell-v2/portability/export")[1]["schema"], 1)
     def test_candidate_admission_rollback_http_chain(self):
         memory = self.request("/api/candidates/admit", "POST", {"candidate_ids": ["c1"]})[1]
         result = self.request(f"/api/rollbacks/{memory['rollback']['id']}", "POST", {})[1]

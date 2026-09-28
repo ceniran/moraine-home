@@ -664,6 +664,7 @@
 
   async function loadGovernancePreview() {
     const panel = document.querySelector('[data-governance-preview]');
+    if (!panel || panel.closest('[hidden]')) return;
     const mode = document.querySelector('[data-governance-mode]').value;
     const onlyMissing = document.querySelector('[data-governance-only-missing]').checked;
     panel.innerHTML = '<div class="workbench-loading"><span class="workbench-mark">◇</span><div><h3>正在重新计算</h3><p>真实记忆不会被修改。</p></div></div>';
@@ -2376,6 +2377,7 @@
     state.textContent = jevSettings.enabled ? '已开启 · 作为可忽略的第二意见' : '已关闭 · 不会调用 Jev';
   }
   async function loadJevSettings() {
+    if (document.querySelector('.jev-settings')?.hidden) return;
     try {
       const response = await fetch('/moraine-beta/api/dwell-v2/jev-settings', { cache: 'no-store' });
       const payload = await response.json();
@@ -2960,9 +2962,9 @@
   loadOverview();
   loadCalendar();
   loadCandidates();
-  loadIdentityRoutingPolicy();
+  if (!document.querySelector('[aria-labelledby="identityRoutingTitle"]')?.hidden) loadIdentityRoutingPolicy();
   loadArchiveMemories();
-  loadGovernancePreview();
+  if (!document.querySelector('[data-governance-preview]')?.closest('[hidden]')) loadGovernancePreview();
   loadMemoryFlow();
   document.querySelector('[data-revision-memory]')?.addEventListener('change', async event => {
     const result = document.querySelector('[data-revision-result]');
@@ -3308,7 +3310,6 @@
   const renderSnapshots = snapshots => {
     snapshotList.innerHTML = snapshots.length ? snapshots.map(snapshot => `<article class="snapshot-card">
       <span><strong>${escapeHtml(snapshot.label)}</strong><small>${escapeHtml(new Date(snapshot.created_at).toLocaleString('zh-CN'))} · ${snapshot.count} 条 · ${(snapshot.bytes / 1024).toFixed(1)}KB</small></span>
-      <button type="button" data-preview-snapshot="${escapeHtml(snapshot.id)}">安全恢复</button>
       <div data-snapshot-impact="${escapeHtml(snapshot.id)}"></div></article>`).join('') : '<p>还没有私有快照。</p>';
   };
   const loadSnapshots = async () => {

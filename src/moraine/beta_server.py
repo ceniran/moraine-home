@@ -179,10 +179,23 @@ def create_beta_server(env: dict[str, str] | None = None):
                 if parsed.path == "/api/dwell-v2/profile-growth-candidates":
                     return self._json(200, {"ok": True,
                                             "pending": store.list_profile_growth_candidates("pending")})
+                if parsed.path == "/api/dwell-v2/candidate-shred-policy":
+                    settings = store.settings()
+                    return self._json(200, {"ok": True, "policy": {
+                        "enabled": settings.get("candidate_retention_enabled", False),
+                        "retention_hours": settings.get("candidate_retention_hours", 168)}})
+                if parsed.path == "/api/dwell-v2/portability/snapshots":
+                    return self._json(200, {"ok": True, "snapshots": store.list_snapshots()})
+                if parsed.path == "/api/dwell-v2/portability/export":
+                    return self._json(200, store.snapshot())
                 if parsed.path == "/api/dwell-v2/reflections":
                     return self._json(200, {"ok": True, "reflections": []})
                 if parsed.path == "/api/dwell-v2/candidates":
-                    rows = [row for row in store.list_candidates() if row.get("state", "pending") == "pending"]
+                    all_candidates = store.list_candidates()
+                    rows = [row for row in all_candidates if row.get("state") == "pending"]
+                    archived = [row for row in all_candidates if row.get("state") in {
+                        "admitted", "associated", "ignored", "routed", "shredded"}]
+                    retention = store.settings()
                     exposed = [{**row, "review_status": "pending", "candidate_entered_at": row.get("created_at"),
                                 "lane": "protected" if row.get("kind") in {"identity", "relationship"} else "actionable",
                                 "status": "protected_review" if row.get("kind") in {"identity", "relationship"} else "ready_for_review",
@@ -199,7 +212,10 @@ def create_beta_server(env: dict[str, str] | None = None):
                                                        "needs_review": protected, "today_generated": 0,
                                                        "today_persisted": 0, "recent_concluded": 0,
                                                        "archived": 0, "shred_eligible": 0, "shred_protected": 0},
-                                            "candidates": exposed, "archived": []})
+                                            "candidates": exposed, "archived": archived,
+                                            "shred_policy": {
+                                                "enabled": retention.get("candidate_retention_enabled", False),
+                                                "retention_hours": retention.get("candidate_retention_hours", 168)}})
                 if parsed.path.startswith("/api/dwell-v2/memories/"):
                     memory_id = parsed.path.rsplit("/", 1)[-1]
                     row = next((item for item in store.list_memories("all") if item.get("id") == memory_id), None)
@@ -385,6 +401,21 @@ def create_beta_server(env: dict[str, str] | None = None):
                 if parsed.path == "/api/dwell-v2/profile-growth-candidates/decide":
                     return self._json(200, {"ok": True, "candidate": store.decide_profile_growth_candidate(
                         str(body.get("candidate_id") or ""), str(body.get("action") or ""))})
+                if parsed.path == "/api/dwell-v2/candidate-shred-policy":
+                    current = store.settings()
+                    updated = store.update_settings({
+                        **current,
+                        "candidate_retention_enabled": bool(body.get("enabled", current.get("candidate_retention_enabled", False))),
+                        "candidate_retention_hours": int(body.get("retention_hours", current.get("candidate_retention_hours", 168))),
+                    })
+                    return self._json(200, {"ok": True, "policy": {
+                        "enabled": updated["candidate_retention_enabled"],
+                        "retention_hours": updated["candidate_retention_hours"]}})
+                if parsed.path == "/api/dwell-v2/candidate-shred/run":
+                    return self._json(200, store.shred_eligible_candidates())
+                if parsed.path == "/api/dwell-v2/portability/snapshots":
+                    return self._json(201, {"ok": True, "snapshot": store.create_snapshot(
+                        str(body.get("label") or "manual"))})
                 if parsed.path == "/api/recall/layered":
                     return self._json(200, store.layered_context(str(body.get("query") or ""),
                                                                  bool(body.get("include_history", False)),

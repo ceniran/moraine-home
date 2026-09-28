@@ -271,8 +271,8 @@ class BetaStore:
         if mode not in {"autonomous", "joint"}:
             raise ValueError("review_mode must be autonomous or joint")
         retention_hours = int(value.get("candidate_retention_hours", current.get("candidate_retention_hours", 168)))
-        if retention_hours not in {24, 72, 168, 720}:
-            raise ValueError("candidate_retention_hours must be 24, 72, 168, or 720")
+        if retention_hours not in {24, 48, 72, 168, 720}:
+            raise ValueError("candidate_retention_hours must be 24, 48, 72, 168, or 720")
         now = utc_now()
         with self.lock:
             data = self._read()
@@ -1055,7 +1055,7 @@ class BetaStore:
         settings = payload.get("settings") or {"review_mode": "autonomous"}
         if (not isinstance(settings, dict)
                 or settings.get("review_mode", "autonomous") not in {"autonomous", "joint"}
-                or int(settings.get("candidate_retention_hours", 168)) not in {24, 72, 168, 720}):
+                or int(settings.get("candidate_retention_hours", 168)) not in {24, 48, 72, 168, 720}):
             raise ValueError("invalid settings")
         clean["settings"] = {
             "review_mode": settings.get("review_mode", "autonomous"),
