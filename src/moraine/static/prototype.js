@@ -127,7 +127,7 @@
     },
     {
       id: 'decay-ranking', type: 'system', typeLabel: '系统', time: 'earlier', timeLabel: '2 天前', weight: 'normal', weightLabel: '普通', importance: 0.48, state: 'quiet', stateLabel: '安静', source: '服务记录',
-      title: '记忆衰减参与召回', summary: '衰减只在相关性接近时调整结果顺序。', recordedAt: '2 天前 16:25', related: '砾砾 · 召回排序',
+      title: '记忆衰减参与召回', summary: '衰减只在相关性接近时调整结果顺序。', recordedAt: '2 天前 16:25', related: '本地语义 · 召回排序',
       body: '时间衰减不会删除记忆，也不会压过明显更相关的结果；只有候选相关性接近时，它才作为较弱信号调整排序。',
       then: '希望旧记忆可以安静下来，但不能仅因时间经过就被判定失效。', thenEvidence: '来自生命周期机制的设计原则。',
       after: '衰减以有限权重接入召回，正文和历史版本仍然保留。', afterEvidence: '来自服务阶段记录。',
@@ -1384,7 +1384,7 @@
     if (!activeCluster || !compare) return;
     const chronologicalMembers = chronologicalClusterMembers(activeCluster);
     const includedCount = activeCluster.neighbors.filter(item => worksetRelation(item) !== 'related').length;
-    compare.innerHTML = `<section class="workset-tools"><header><strong>人工工作集</strong><small>砾砾只提供初始建议，成员与关系由你决定</small></header><button type="button" data-open-memory-picker>＋ 添加记忆</button><div class="workset-picker" data-memory-picker hidden><label>搜索全部有效记忆<input type="search" data-memory-picker-query placeholder="输入标题、标签或正文关键词"></label><div data-memory-picker-results><small>输入至少两个字开始查找。</small></div></div></section>`
+    compare.innerHTML = `<section class="workset-tools"><header><strong>人工工作集</strong><small>本地语义模型只提供初始建议，成员与关系由你决定</small></header><button type="button" data-open-memory-picker>＋ 添加记忆</button><div class="workset-picker" data-memory-picker hidden><label>搜索全部有效记忆<input type="search" data-memory-picker-query placeholder="输入标题、标签或正文关键词"></label><div data-memory-picker-results><small>输入至少两个字开始查找。</small></div></div></section>`
       + chronologicalMembers.map(item => compareMemoryMarkup(item, item.id === activeCluster.source.id)).join('')
       + `<button class="continue-merge" type="button" data-continue-merge>${includedCount ? `核对 ${includedCount} 条成员关系，生成草稿` : '请添加至少一条要整合的记忆'}</button>`;
     const picker = compare.querySelector('[data-memory-picker]');
@@ -1487,7 +1487,7 @@
     }
     list.className = '';
     const selectionNote = cluster.selection?.skipped_newer
-      ? `<em>最新 ${cluster.selection.skipped_newer} 条仍在等待砾砾同步，暂用第 ${cluster.selection.position} 条已索引记忆。</em>`
+      ? `<em>最新 ${cluster.selection.skipped_newer} 条仍在等待本地语义索引同步，暂用第 ${cluster.selection.position} 条已索引记忆。</em>`
       : '<em>正在使用最新一条已索引记忆。</em>';
     list.innerHTML = `<button class="cluster-card" type="button" data-open-cluster><small>MORAINE · 只读建议</small><strong>${escapeHtml(cluster.source.title)}</strong><p>以这条记忆为中心，找到 ${cluster.neighbors.length} 个语义相近的邻居。</p>${selectionNote}<span class="cluster-card-footer"><span>点击进入逐条核对</span><b>${cluster.neighbors.length + 1} 条记忆 ›</b></span></button>`;
     const position = cluster.selection?.offset ?? clusterOffset;
@@ -1540,7 +1540,7 @@
         <input type="checkbox" value="${escapeHtml(point.memory_id)}" checked>
         <span><strong>${escapeHtml(point.title)}</strong><p>${escapeHtml(point.preview || '这条候选没有可展示的短预览。')}</p><small>${escapeHtml(shortDate(point.observed_at))}${anchors.has(point.memory_id) ? ' · 检索锚点' : ''}</small></span>
         <b>${Number(point.similarity).toFixed(2)}</b>
-      </label>`).join('') + `<button class="thread-confirm" type="button" data-confirm-thread>确认 ${payload.points.length} 个候选坐标</button><p class="thread-result" data-thread-result>砾砾已在阈值下排除 ${Number(payload.excluded?.below_min_score || 0)} 条；尚未形成或保存发展线。</p>`;
+      </label>`).join('') + `<button class="thread-confirm" type="button" data-confirm-thread>确认 ${payload.points.length} 个候选坐标</button><p class="thread-result" data-thread-result>本地语义模型已在阈值下排除 ${Number(payload.excluded?.below_min_score || 0)} 条；尚未形成或保存发展线。</p>`;
     container.querySelector('[data-confirm-thread]').addEventListener('click', () => {
       const selected = [...container.querySelectorAll('input:checked')].map(input => input.value);
       container.querySelector('[data-thread-result]').textContent = selected.length
@@ -1594,7 +1594,7 @@
       selection: { reason: 'manually_selected', position: 1, skipped_newer: 0, manual: true } });
     const card = document.querySelector('[data-open-cluster]');
     card.querySelector('small').textContent = '手动选择 · 当前工作集';
-    card.querySelector('em').textContent = `从记忆库带来 ${records.length} 条记忆；砾砾只围绕这组内容工作。`;
+    card.querySelector('em').textContent = `从记忆库带来 ${records.length} 条记忆；本地语义模型只围绕这组内容工作。`;
     showView('workbench');
   }
 
@@ -1627,7 +1627,7 @@
     const timeline = draft.timeline.length ? `<section class="mechanical-timeline"><strong>${draft.hasCurrent ? '阶段更迭 · 当前状态与发展时间线' : '按事件时间排列的发展线'}</strong><p>${draft.hasCurrent ? `只有明确标记为阶段更迭的最新节点 ${escapeHtml(draft.currentSourceId)} 形成当前状态；全部阶段仍按时间排列。` : '承载入口只负责保存这条事件链，不会被提前到其他阶段前面。'}</p><ol>${draft.timeline.map(item => `<li><time>${escapeHtml(shortDate(item.occurred_at))}</time><span>${escapeHtml(item.title)}</span></li>`).join('')}</ol></section>` : '';
     const currentStage = [activeCluster.source, ...activeCluster.neighbors].find(item => item.id === draft.currentSourceId) || activeCluster.source;
     const related = draft.excludedRelatedIds.length ? `<section class="mechanical-removed is-empty"><strong>${draft.excludedRelatedIds.length} 条仅相关记忆保持独立</strong><small>它们不会被归档，也不进入整合正文；之后可以送往联想匣。</small></section>` : '';
-    editor.innerHTML = `<header><strong>砾砾的关系化整合草稿</strong><small>不同关系采用不同写录结构</small></header><label>新记忆标题<input data-draft-title value="${escapeHtml(draft.currentTitle || currentStage.title)}"></label><label>分区整合正文<textarea data-draft-content rows="12">${escapeHtml(draft.content)}</textarea></label>${timeline}<section class="mechanical-sources"><strong>逐句来源</strong><ul>${sources}</ul></section>${removed}${related}<label>整合说明<textarea data-draft-reason rows="3">按成员关系分别写录：压缩硬重复、吸收补充、分离当前状态与历史阶段，并保留未决冲突来源。</textarea></label><button type="button" data-submit-draft>确认整合并写入记忆库</button>`;
+    editor.innerHTML = `<header><strong>关系化整合草稿</strong><small>不同关系采用不同写录结构</small></header><label>新记忆标题<input data-draft-title value="${escapeHtml(draft.currentTitle || currentStage.title)}"></label><label>分区整合正文<textarea data-draft-content rows="12">${escapeHtml(draft.content)}</textarea></label>${timeline}<section class="mechanical-sources"><strong>逐句来源</strong><ul>${sources}</ul></section>${removed}${related}<label>整合说明<textarea data-draft-reason rows="3">按成员关系分别写录：压缩硬重复、吸收补充、分离当前状态与历史阶段，并保留未决冲突来源。</textarea></label><button type="button" data-submit-draft>确认整合并写入记忆库</button>`;
     editor.querySelector('[data-submit-draft]').addEventListener('click', submitDraft);
     mergeStepTabs.find((tab) => tab.dataset.mergeStep === 'draft').click();
   }
@@ -1884,7 +1884,7 @@
     activeReviewDraft = {
       title: newRecord.title,
       content: newRecord.body || newRecord.summary,
-      reason: `砾砾发现两条记忆语义相近，记录时间相隔 ${Math.round(pair.gap_hours)} 小时；需要共同判断这是阶段变化、重复还是应当并存。`
+      reason: `本地语义模型发现两条记忆语义相近，记录时间相隔 ${Math.round(pair.gap_hours)} 小时；需要人工判断这是阶段变化、重复还是应当并存。`
     };
     activeReviewKind = 'memory-change';
     const card = document.querySelector('[data-review-card]');
@@ -1898,7 +1898,7 @@
     card.querySelector('[data-review-updated]').textContent = newRecord.title;
     card.querySelector('[data-review-updated-body]').textContent = newRecord.body;
     card.querySelector('[data-review-reason]').textContent = activeReviewDraft.reason;
-    card.querySelector('[data-review-sources]').innerHTML = '<p>候选只由相似度与时间差发现；砾砾没有裁决替换关系。</p>';
+    card.querySelector('[data-review-sources]').innerHTML = '<p>候选只由相似度与时间差发现；本地语义模型没有裁决替换关系。</p>';
     reviewChoices = { xiaoran: null, cairn: null };
     card.querySelector('[data-execution-plan]').hidden = true;
     card.querySelector('[data-build-plan]').disabled = true;
@@ -1917,11 +1917,11 @@
       replacementPairs.clear();
       payload.candidates.forEach(pair => replacementPairs.set(pair.id, pair));
       if (!payload.candidates.length) {
-        container.innerHTML = '<div class="workbench-loading"><span class="workbench-mark">✓</span><div><h3>目前没有替换候选</h3><p>砾砾没有发现同时满足相似度与 24 小时时间差的有效记忆。</p></div></div>';
+        container.innerHTML = '<div class="workbench-loading"><span class="workbench-mark">✓</span><div><h3>目前没有替换候选</h3><p>本地语义模型没有发现同时满足相似度与 24 小时时间差的有效记忆。</p></div></div>';
         return;
       }
       container.className = 'replacement-list';
-      container.innerHTML = payload.candidates.map(pair => `<article class="replacement-card"><header><span><small>${Math.round(pair.gap_hours)} 小时间隔 · 待判断</small><strong>可能是阶段变化，也可能只是相关</strong></span><b>${Math.round(pair.similarity * 100)}%</b></header><div class="replacement-pair"><section><small>较早</small><strong>${escapeHtml(pair.old_memory.title)}</strong></section><i>→</i><section><small>较新</small><strong>${escapeHtml(pair.new_memory.title)}</strong></section></div><p>砾砾只负责把它们放到一起；确认后仅建立“较新取代较早”的关系，旧记忆与历史仍保留。</p><label class="replacement-reason">替换理由<textarea rows="2" data-replacement-reason placeholder="为什么较新的记忆应取代较早的记忆"></textarea></label><button type="button" data-review-replacement="${escapeHtml(pair.id)}">生成真实替换核对</button><div data-replacement-result="${escapeHtml(pair.id)}"><p>尚未写入。</p></div></article>`).join('');
+      container.innerHTML = payload.candidates.map(pair => `<article class="replacement-card"><header><span><small>${Math.round(pair.gap_hours)} 小时间隔 · 待判断</small><strong>可能是阶段变化，也可能只是相关</strong></span><b>${Math.round(pair.similarity * 100)}%</b></header><div class="replacement-pair"><section><small>较早</small><strong>${escapeHtml(pair.old_memory.title)}</strong></section><i>→</i><section><small>较新</small><strong>${escapeHtml(pair.new_memory.title)}</strong></section></div><p>本地语义模型只负责把它们放到一起；确认后仅建立“较新取代较早”的关系，旧记忆与历史仍保留。</p><label class="replacement-reason">替换理由<textarea rows="2" data-replacement-reason placeholder="为什么较新的记忆应取代较早的记忆"></textarea></label><button type="button" data-review-replacement="${escapeHtml(pair.id)}">生成真实替换核对</button><div data-replacement-result="${escapeHtml(pair.id)}"><p>尚未写入。</p></div></article>`).join('');
     } catch (_) {
       container.innerHTML = '<div class="workbench-loading"><span class="workbench-mark">!</span><div><h3>暂时无法读取替换候选</h3><p>真实记忆仍在原位，稍后可以安全重试。</p></div></div>';
     }
@@ -1990,7 +1990,7 @@
     const note = document.querySelector('[data-cluster-mode-note]');
     if (note) note.textContent = includeRelatedClusters
       ? '人工浏览不会自动合并；可以改判、移出或保持独立'
-      : '默认只显示砾砾认为需要判断的簇';
+      : '默认只显示本地语义模型认为需要判断的簇';
     await loadWorkbenchCluster();
   });
 
@@ -2188,7 +2188,7 @@
     const eventSuggestions = row.event_match_suggestions || [];
     const eventStrip = eventSuggestions.length ? `<section class="candidate-event-suggestions"><header><strong>可能属于同一事件</strong><small>仅供检查</small></header>${eventSuggestions.map(item => `<article><b>${escapeHtml(item.title || item.candidate_id)}</b><span>${escapeHtml((item.evidence?.shared_keywords || []).join('、') || '无共同词')} · 相隔 ${Number(item.evidence?.time_gap_minutes || 0)} 分钟</span><small>${item.blockers?.length ? `已阻断：${escapeHtml(item.blockers.join('、'))}` : '对象与动作连续性尚未确认'}</small></article>`).join('')}<footer>不会自动合篮；确认后仍保留来源与拆回能力。</footer></section>` : '';
     position.textContent = `${candidateIndex + 1} / ${candidateRows.length}`;
-    card.innerHTML = `<article class="candidate-paper"><div class="candidate-meta"><span>${escapeHtml(lane)}</span><span>${escapeHtml(relativeTime(row.occurred_at))}</span><span>${escapeHtml(row.kind || 'event')}</span></div><h3>${highlightCandidateKeywords(row.title, keywordEvidence, 'title')}</h3><p>${highlightCandidateKeywords(row.content, keywordEvidence, 'content')}</p>${keywordStrip}${eventStrip}${row.tags?.length ? `<div class="candidate-tags">${row.tags.map(tag => `<span>${escapeHtml(tag)}</span>`).join('')}</div>` : ''}<button class="candidate-add-workset" type="button" data-add-current-candidate ${candidateWorkset.has(row.id) ? 'disabled' : ''}>${candidateWorkset.has(row.id) ? '已加入工作集' : '加入候选工作集'}</button><section class="candidate-neighbors"><header><strong>砾砾找到的线索</strong><small>关系仍未判断</small></header>${neighborList.length ? neighborList.map(item => `<div><span><b>${escapeHtml(item.title || item.id)}</b><small>${item.origin}</small></span><strong>${Math.round(Number(item.similarity || 0) * 100)}%</strong></div>`).join('') : '<p>目前没有超过门槛的相似线索。</p>'}</section></article>`;
+    card.innerHTML = `<article class="candidate-paper"><div class="candidate-meta"><span>${escapeHtml(lane)}</span><span>${escapeHtml(relativeTime(row.occurred_at))}</span><span>${escapeHtml(row.kind || 'event')}</span></div><h3>${highlightCandidateKeywords(row.title, keywordEvidence, 'title')}</h3><p>${highlightCandidateKeywords(row.content, keywordEvidence, 'content')}</p>${keywordStrip}${eventStrip}${row.tags?.length ? `<div class="candidate-tags">${row.tags.map(tag => `<span>${escapeHtml(tag)}</span>`).join('')}</div>` : ''}<button class="candidate-add-workset" type="button" data-add-current-candidate ${candidateWorkset.has(row.id) ? 'disabled' : ''}>${candidateWorkset.has(row.id) ? '已加入工作集' : '加入候选工作集'}</button><section class="candidate-neighbors"><header><strong>本地语义模型找到的线索</strong><small>关系仍未判断</small></header>${neighborList.length ? neighborList.map(item => `<div><span><b>${escapeHtml(item.title || item.id)}</b><small>${item.origin}</small></span><strong>${Math.round(Number(item.similarity || 0) * 100)}%</strong></div>`).join('') : '<p>目前没有超过门槛的相似线索。</p>'}</section></article>`;
     card.querySelector('[data-add-current-candidate]')?.addEventListener('click', () => { addCandidateToWorkset(row); renderCandidate(); });
   }
   function renderCandidateShred(payload) {
@@ -3489,7 +3489,7 @@
   reflectionFlipCard?.addEventListener('click', () => {
     const showingReflection = reflectionFlipCard.getAttribute('aria-pressed') === 'true';
     reflectionFlipCard.setAttribute('aria-pressed', String(!showingReflection));
-    reflectionFlipCard.setAttribute('aria-label', showingReflection ? '翻到 Cairn 的反思面' : '返回整合记忆正面');
+    reflectionFlipCard.setAttribute('aria-label', showingReflection ? '翻到 Agent 的反思面' : '返回整合记忆正面');
   });
   const residentCard = document.querySelector('[data-resident-card]');
   const residentCardFlip = document.querySelector('[data-resident-card-flip]');

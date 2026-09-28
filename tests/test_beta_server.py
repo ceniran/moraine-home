@@ -233,6 +233,16 @@ class BetaServerTest(unittest.TestCase):
         self.assertNotIn("'review', 'activity', 'study'", script)
         self.assertNotIn('aria-labelledby="migrationTitle" hidden', index)
 
+    def test_public_feature_copy_has_no_family_names(self):
+        static = Path(__file__).parents[1] / "src" / "moraine" / "static"
+        index = (static / "index.html").read_text(encoding="utf-8")
+        script = (static / "prototype.js").read_text(encoding="utf-8")
+        self.assertNotIn("砾砾", index + script)
+        self.assertNotIn("恩恩", index + script)
+        self.assertNotIn("岑野", index + script)
+        self.assertNotIn("Cairn 的反思面", script)
+        self.assertIn("Cairn × Xiaoran · Moraine", index)
+
     def test_visible_auto_weight_control_has_real_action_contract(self):
         preview = self.request("/api/dwell-v2/actions/preview", "POST", {
             "action": "auto_weight", "actor": "system", "reason": "合成检查"

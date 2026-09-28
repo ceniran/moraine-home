@@ -183,7 +183,7 @@
         <button class="menu-button" type="button" data-open-sidebar aria-label="打开导航">☰</button>
         <div><p class="kicker">CANDIDATE INBOX</p><h1 id="candidateInboxTitle">候选箱</h1></div>
       </header>
-      <p class="candidate-intro">记忆形成之前的安静入口。砾砾只寻找相似线索，不替我们裁决。</p>
+      <p class="candidate-intro">记忆形成之前的安静入口。本地语义模型只寻找相似线索，不替使用者裁决。</p>
       <p class="candidate-intro" data-candidate-flow-summary>正在核对今天的候选流向。</p>
       <section class="candidate-counts" aria-label="候选状态"><span><strong data-candidate-count="pending">—</strong><small>待判断</small></span><span><strong data-candidate-count="protected">—</strong><small>受保护</small></span><span><strong data-candidate-count="held">—</strong><small>静置</small></span></section>
       <section class="candidate-browser panel"><header><div><small>EVENT BASKET</small><h2 data-candidate-position>正在读取</h2></div><div class="candidate-arrows"><button type="button" data-candidate-previous aria-label="上一个候选">←</button><button type="button" data-candidate-next aria-label="下一个候选">→</button></div></header><div data-candidate-card aria-live="polite"><p>正在读取真实候选。</p></div></section>
@@ -398,7 +398,7 @@
           <button type="button" aria-selected="false" data-real-action="weight">手动赋权</button>
         </div>
         <form data-real-form="merge_many">
-          <h3>核对砾砾找到的记忆簇</h3>
+          <h3>核对本地语义模型找到的记忆簇</h3>
           <p class="real-caution">可以更换承载入口；正文始终按事件时间排列，入口选择不再决定叙事地位或正文优先级。</p>
           <div class="real-cluster-switcher" data-real-cluster-switcher hidden>
             <button type="button" data-real-cluster-previous>上一簇</button>
@@ -450,7 +450,7 @@
         <div class="workbench-stage" aria-live="polite">
           <article data-workbench-panel="integrate">
             <header class="area-header"><span><small>最常用</small><h3>整合相近的记忆碎片</h3></span><b data-integrate-count>读取中</b></header>
-            <div class="cluster-refresh-row"><small data-cluster-mode-note>默认只显示砾砾认为需要判断的簇</small><span><button type="button" data-toggle-related>查看纯相关候选</button><button type="button" data-refresh-cluster>手动刷新候选</button></span></div>
+            <div class="cluster-refresh-row"><small data-cluster-mode-note>默认只显示本地语义模型认为需要判断的簇</small><span><button type="button" data-toggle-related>查看纯相关候选</button><button type="button" data-refresh-cluster>手动刷新候选</button></span></div>
             <div class="cluster-refresh-row" data-cluster-switcher hidden><button type="button" data-cluster-previous>上一簇</button><small data-cluster-position>候选 1 / ?</small><button type="button" data-cluster-next>下一簇</button><button class="cluster-defer" type="button" data-cluster-defer>这簇暂不整合</button></div>
             <div class="merge-steps" role="tablist" aria-label="整合步骤">
               <button type="button" data-merge-step="cluster" aria-selected="true"><i>01</i><span>聚类</span></button>
@@ -469,7 +469,7 @@
             <div class="operation-form revision-form"><header><small>保留旧版本</small><h3>修订一条真实记忆</h3><p>标题或正文发生变化时建立新版本，原文仍可从历史恢复。</p></header><label>选择记忆<select data-revision-memory><option value="">请选择</option></select></label><label>标题<input data-revision-title maxlength="200"></label><label>正文<textarea data-revision-content rows="9"></textarea></label><label>修订理由<textarea data-revision-reason rows="3" placeholder="为什么需要修订"></textarea></label><button type="button" data-preview-revision>预览修订</button><div data-revision-result><p>尚未读取记忆。</p></div></div>
           </article>
           <article data-workbench-panel="supersede" hidden>
-            <div class="replacement-queue"><header><small>砾砾只读发现</small><h3>可能需要替换的记忆</h3><p>语义相近且记录时间相隔超过 24 小时。相似不等于替换，每一组仍需判断是变化、重复还是并存。</p></header><div data-replacement-list><div class="workbench-loading"><span class="workbench-mark" aria-hidden="true">◇</span><div><h3>正在寻找替换候选</h3><p>只读取有效记忆与相似度，不改变任何状态。</p></div></div></div></div>
+            <div class="replacement-queue"><header><small>本地语义模型只读发现</small><h3>可能需要替换的记忆</h3><p>语义相近且记录时间相隔超过 24 小时。相似不等于替换，每一组仍需判断是变化、重复还是并存。</p></header><div data-replacement-list><div class="workbench-loading"><span class="workbench-mark" aria-hidden="true">◇</span><div><h3>正在寻找替换候选</h3><p>只读取有效记忆与相似度，不改变任何状态。</p></div></div></div></div>
           </article>
           <article data-workbench-panel="weight" hidden>
             <div class="operation-form weight-workbench"><header><small>真实赋权</small><h3>调整一条记忆的召回强度</h3><p>先核对变化，再输入本次六位确认码写入；正文和旧版本保持不变。</p></header><label>选择真实记忆<select data-workbench-weight-memory><option value="">请选择</option></select></label><label>记忆强度 <b data-workbench-weight-value>50</b> / 100<input type="range" min="0" max="79" step="1" value="50" data-workbench-weight-range></label><p class="real-caution">0～79 可在这里确认写入；80～100 的核心认领与锁定仍需共同审阅。</p><label>赋权理由<textarea rows="3" data-workbench-weight-reason placeholder="为什么希望以后更容易或更少想起它"></textarea></label><button type="button" data-workbench-weight-preview>核对赋权变化</button><div data-workbench-weight-result><p>尚未写入。</p></div></div>
@@ -493,7 +493,7 @@
       </section>
       <section class="review-card" data-review-card hidden>
         <header><span><small>待双方确认</small><strong data-review-action>变更草稿</strong></span><b>未写入</b></header>
-        <div class="review-diff"><section><small data-review-original-label>原记忆簇</small><strong data-review-original></strong><p data-review-original-body></p></section><i aria-hidden="true">→</i><section><small data-review-updated-label>砾砾草稿</small><strong data-review-updated></strong><p data-review-updated-body></p></section></div>
+        <div class="review-diff"><section><small data-review-original-label>原记忆簇</small><strong data-review-original></strong><p data-review-original-body></p></section><i aria-hidden="true">→</i><section><small data-review-updated-label>整合草稿</small><strong data-review-updated></strong><p data-review-updated-body></p></section></div>
         <p data-review-reason></p>
         <details class="review-sources"><summary>查看逐句来源与机械删减</summary><div data-review-sources></div></details>
         <div class="signature-row">
