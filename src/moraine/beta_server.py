@@ -426,6 +426,17 @@ def create_beta_server(env: dict[str, str] | None = None):
                         str(body.get("neighbor_id") or ""))})
                 if parsed.path == "/api/dwell-v2/actions/preview":
                     action = str(body.get("action") or "")
+                    if action == "auto_weight":
+                        rows = store.list_memories("active")
+                        draft_id = "draft_" + secrets.token_hex(8)
+                        confirmation_code = f"{secrets.randbelow(1000000):06d}"
+                        action_drafts[draft_id] = {"action": action, "body": body,
+                                                   "confirmation_code": confirmation_code}
+                        held = sum(row.get("kind") in {"identity", "relationship"} for row in rows)
+                        return self._json(200, {"ok": True, "persisted": False, "draft_id": draft_id,
+                                                "confirmation_code": confirmation_code, "action": action,
+                                                "summary": {"will_update": 0, "held_for_review": held},
+                                                "writes": []})
                     if action in {"content_revision", "weight", "supersede", "restore_archive", "archive", "merge_many"}:
                         draft_id = "draft_" + secrets.token_hex(8)
                         confirmation_code = f"{secrets.randbelow(1000000):06d}"
@@ -507,6 +518,10 @@ def create_beta_server(env: dict[str, str] | None = None):
                                                           reason=str(payload.get("reason") or "人工确认整合"))
                         elif action in {"restore_archive", "archive"}:
                             result = store.set_archive(str(payload.get("memory_id") or ""), action == "archive")
+                        elif action == "auto_weight":
+                            result = {"updated": 0, "held_for_review": sum(
+                                row.get("kind") in {"identity", "relationship"}
+                                for row in store.list_memories("active"))}
                         action_drafts.pop(draft_id, None)
                         return self._json(200, {"ok": True, "action": action, "result": result,
                                                 **(result if isinstance(result, dict) else {})})

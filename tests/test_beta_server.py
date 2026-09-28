@@ -227,10 +227,21 @@ class BetaServerTest(unittest.TestCase):
         script = (Path(__file__).parents[1] / "src" / "moraine" / "static" / "prototype.js").read_text(encoding="utf-8")
         self.assertIn('class="cairn-entry" type="button" data-view="cairn" aria-label="进入实例空间">', index)
         self.assertIn("['cairn', 'calendar', 'candidates'", script)
-        for view in ('review', 'activity', 'study'):
-            self.assertIn(f'data-view="{view}"', index)
-        self.assertIn("'review', 'activity', 'study'", script)
+        self.assertIn('data-view="activity"', index)
+        self.assertNotIn('data-view="review"', index)
+        self.assertNotIn('data-view="study"', index)
+        self.assertNotIn("'review', 'activity', 'study'", script)
         self.assertNotIn('aria-labelledby="migrationTitle" hidden', index)
+
+    def test_visible_auto_weight_control_has_real_action_contract(self):
+        preview = self.request("/api/dwell-v2/actions/preview", "POST", {
+            "action": "auto_weight", "actor": "system", "reason": "合成检查"
+        })[1]
+        self.assertFalse(preview["persisted"])
+        result = self.request("/api/dwell-v2/actions/execute", "POST", {
+            "draft_id": preview["draft_id"], "confirmation_code": preview["confirmation_code"]
+        })[1]
+        self.assertEqual(result["action"], "auto_weight")
 
     def test_dwell_v2_read_only_adapter_contracts(self):
         overview = self.request("/api/dwell-v2/overview")[1]
