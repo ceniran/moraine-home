@@ -177,13 +177,14 @@ class AMLAdapter:
         memories = data["memories"]
         rebuild = data.get("embedder") != self.embedder.identity
         pending = memories if rebuild else [row for row in memories if not isinstance(row.get("vector"), list)]
-        for start in range(0, len(pending), self.batch_size):
-            chunk = pending[start:start + self.batch_size]
+        if pending:
             with self.embed_lock:
-                vectors = self.embedder.passages([row["content"] for row in chunk], self.batch_size)
-            if len(vectors) != len(chunk):
+                vectors = self.embedder.passages(
+                    [row["content"] for row in pending], self.batch_size
+                )
+            if len(vectors) != len(pending):
                 raise ValueError("embedder returned an unexpected number of vectors")
-            for row, vector in zip(chunk, vectors, strict=True):
+            for row, vector in zip(pending, vectors, strict=True):
                 row["vector"] = _vector(vector)
         if rebuild or pending:
             data["embedder"] = self.embedder.identity
