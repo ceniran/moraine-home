@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Iterable, Protocol
 
 from .query_planner import expand_query
+from .aml_shadow import ensure_shadow_graph, graph_bonuses
 
 
 KEYWORD_SCHEMA = "aml-keywords-v1"
@@ -263,6 +264,7 @@ class AMLAdapter:
                 self._ensure_keywords(data)
                 self._ensure_structure(data)
                 self._apply_forgetting(data, normalized)
+                ensure_shadow_graph(data)
                 self._ensure_vectors(data)
                 _atomic(self._file(user_id), data)
         return {"success": True, "request_id": request_id, "user_id": user_id, "session_id": session_id}
@@ -289,6 +291,7 @@ class AMLAdapter:
             data = self._read(user_id)
             changed = self._ensure_keywords(data)
             changed = self._ensure_structure(data) or changed
+            changed = ensure_shadow_graph(data) or changed
             if self._ensure_vectors(data) or changed:
                 _atomic(self._file(user_id), data)
         semantic_queries = []
@@ -361,6 +364,12 @@ class AMLAdapter:
                     "causal": round(causal, 6), "naming": round(naming, 6),
                 }
                 scored.append((combined, semantic, lexical, row, components))
+        base_scores = {row["id"]: score for score, _semantic, _lexical, row, _components in scored}
+        graph = graph_bonuses(data, base_scores, query)
+        scored = [(score + float(graph.get(row["id"], {}).get("bonus", 0.0)), semantic, lexical, row,
+                   {**components, "graph_bonus": round(float(graph.get(row["id"], {}).get("bonus", 0.0)), 6),
+                    "graph_relations": list(dict.fromkeys(graph.get(row["id"], {}).get("relations", [])))})
+                  for score, semantic, lexical, row, components in scored]
         scored.sort(key=lambda item: (item[0], item[2], float(item[3].get("time_value") or 0), item[3]["order"]), reverse=True)
         self._audit_search(body, user_id, scored)
         maximum = max([max(score, 0.0) for score, *_ in scored], default=1.0) or 1.0
