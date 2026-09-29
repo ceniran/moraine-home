@@ -161,6 +161,34 @@ class AMLAdapterTest(unittest.TestCase):
         result = adapter.search({"query": "会议现在几点", "user_id": "alice", "top_k": 2})
         self.assertEqual(result["data"][0]["content"], "会议后来改为下午四点")
 
+    def test_epoch_milliseconds_sort_numerically_and_are_returned(self):
+        root = Path(self.temporary.name) / "epoch-order"
+        adapter = AMLAdapter(root)
+        adapter.add({"request_id": "old", "user_id": "alice", "session_id": "s1",
+                     "messages": [{"role": "user", "timestamp": 999999999999, "content": "项目最初使用旧入口"}]})
+        adapter.add({"request_id": "new", "user_id": "alice", "session_id": "s2",
+                     "messages": [{"role": "user", "timestamp": 1704067200000, "content": "项目现在改为新入口"}]})
+        result = adapter.search({"query": "项目现在使用哪个入口", "user_id": "alice", "top_k": 2})
+        self.assertEqual(result["data"][0]["content"], "项目现在改为新入口")
+        self.assertEqual(result["data"][0]["created_at"], 1704067200000)
+
+    def test_date_evidence_and_causal_bridge_survive_across_sessions(self):
+        root = Path(self.temporary.name) / "causal-time"
+        adapter = AMLAdapter(root)
+        adapter.add({"request_id": "cause", "user_id": "alice", "session_id": "s1",
+                     "messages": [{"role": "user", "timestamp": 1704067200000,
+                                   "content": "因为服务器内存不足，9月3日模型任务失败"}]})
+        adapter.add({"request_id": "effect", "user_id": "alice", "session_id": "s2",
+                     "messages": [{"role": "assistant", "timestamp": 1704240000000,
+                                   "content": "因此团队在9月5日把批量大小降到4"}]})
+        result = adapter.search({"query": "模型失败后为什么把批量大小降到4，发生在什么时候",
+                                 "user_id": "alice", "top_k": 2})
+        self.assertEqual({row["content"] for row in result["data"]},
+                         {"因为服务器内存不足，9月3日模型任务失败", "因此团队在9月5日把批量大小降到4"})
+        stored = json.loads(adapter._file("alice").read_text(encoding="utf-8"))
+        self.assertEqual(stored["structure_schema"], "aml-structure-v2")
+        self.assertEqual(stored["memories"][0]["temporal_facts"], ["9月3日"])
+
     def test_forgetting_hides_prior_evidence_but_keeps_auditable_command(self):
         root = Path(self.temporary.name) / "governance"
         adapter = AMLAdapter(root)
