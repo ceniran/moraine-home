@@ -1,6 +1,7 @@
 import json
 import threading
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from urllib.error import HTTPError
@@ -119,6 +120,65 @@ class AMLAdapterTest(unittest.TestCase):
         stored = json.loads(path.read_text(encoding="utf-8"))
         self.assertIn("蓝色", stored["memories"][0]["intrinsic_keywords"])
         self.assertIn("蓝色", stored["memories"][1]["auxiliary_terms"])
+
+    def test_relation_bridge_returns_both_sides_of_a_multi_hop_chain(self):
+        root = Path(self.temporary.name) / "relations"
+        adapter = AMLAdapter(root)
+        adapter.add({"request_id": "relation-1", "user_id": "alice", "session_id": "s1",
+                     "messages": [{"role": "user", "content": "Kee和恩恩开始通过邮件往来"}]})
+        adapter.add({"request_id": "relation-2", "user_id": "alice", "session_id": "s2",
+                     "messages": [{"role": "assistant", "content": "这段邮件往来后来让两人成为了笔友"}]})
+        result = adapter.search({"query": "Kee和恩恩是什么关系", "user_id": "alice", "top_k": 2})
+        self.assertEqual({row["content"] for row in result["data"]},
+                         {"Kee和恩恩开始通过邮件往来", "这段邮件往来后来让两人成为了笔友"})
+
+    def test_current_state_prefers_later_explicit_update(self):
+        root = Path(self.temporary.name) / "temporal"
+        adapter = AMLAdapter(root)
+        adapter.add({"request_id": "old", "user_id": "alice", "session_id": "s1",
+                     "messages": [{"role": "user", "timestamp": 1000, "content": "会议最初定在下午两点"}]})
+        adapter.add({"request_id": "new", "user_id": "alice", "session_id": "s2",
+                     "messages": [{"role": "user", "timestamp": 2000, "content": "会议后来改为下午四点"}]})
+        result = adapter.search({"query": "会议现在几点", "user_id": "alice", "top_k": 2})
+        self.assertEqual(result["data"][0]["content"], "会议后来改为下午四点")
+
+    def test_forgetting_hides_prior_evidence_but_keeps_auditable_command(self):
+        root = Path(self.temporary.name) / "governance"
+        adapter = AMLAdapter(root)
+        adapter.add({"request_id": "fact", "user_id": "alice", "session_id": "s1",
+                     "messages": [{"role": "user", "content": "我的家庭住址是青石路十八号"}]})
+        adapter.add({"request_id": "forget", "user_id": "alice", "session_id": "s2",
+                     "messages": [{"role": "user", "content": "请删除我的家庭住址"}]})
+        result = adapter.search({"query": "我的家庭住址", "user_id": "alice", "top_k": 10})
+        self.assertNotIn("我的家庭住址是青石路十八号", [row["content"] for row in result["data"]])
+        stored = json.loads(adapter._file("alice").read_text(encoding="utf-8"))
+        self.assertEqual(stored["memories"][0]["state"], "forgotten")
+        self.assertEqual(stored["memories"][0]["forgotten_by"], stored["memories"][1]["id"])
+
+    def test_rule_and_privacy_evidence_survives_noise(self):
+        root = Path(self.temporary.name) / "rules"
+        adapter = AMLAdapter(root)
+        for index in range(30):
+            adapter.add({"request_id": f"noise-{index}", "user_id": "alice", "session_id": f"n-{index}",
+                         "messages": [{"role": "user", "content": f"普通项目记录{index}，今天整理了资料"}]})
+        target = "如果发现访问令牌泄露，必须立即轮换令牌，并且不得在公开回复中披露旧令牌"
+        adapter.add({"request_id": "rule", "user_id": "alice", "session_id": "rule",
+                     "messages": [{"role": "assistant", "content": target}]})
+        result = adapter.search({"query": "令牌泄露后应该怎样处理，能公开旧令牌吗", "user_id": "alice", "top_k": 5})
+        self.assertEqual(result["data"][0]["content"], target)
+
+    def test_parallel_users_keep_separate_locks_and_files(self):
+        root = Path(self.temporary.name) / "parallel"
+        adapter = AMLAdapter(root)
+        self.assertIs(adapter._user_lock("alice"), adapter._user_lock("alice"))
+        self.assertIsNot(adapter._user_lock("alice"), adapter._user_lock("bob"))
+        def add(index):
+            return adapter.add({"request_id": f"r-{index}", "user_id": f"u-{index}", "session_id": "s",
+                                "messages": [{"role": "user", "content": f"并发记录{index}"}]})
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            results = list(pool.map(add, range(16)))
+        self.assertTrue(all(result["success"] for result in results))
+        self.assertEqual(len(list(root.glob("*.json"))), 16)
 
 
 if __name__ == "__main__": unittest.main()
