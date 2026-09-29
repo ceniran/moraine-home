@@ -131,7 +131,7 @@ class AMLAdapter:
         # serialize model access while keeping file and keyword work concurrent.
         self.embed_lock = threading.Lock()
         # Accept concurrent clients while bounding full-store jobs in memory.
-        self.workload_slots = threading.BoundedSemaphore(2)
+        self.workload_slots = threading.BoundedSemaphore(1)
         self.diagnostic_log = Path(diagnostic_log) if diagnostic_log else None
         self.user_locks: dict[str, threading.RLock] = {}
 
