@@ -88,6 +88,10 @@ class AMLAdapter:
         self.embedder = embedder
         self.batch_size = max(1, int(batch_size))
         self.lock = threading.RLock()
+        # FastEmbed/ONNX may create worker processes per call. The leaderboard
+        # sends concurrent users, so user-level locks alone are insufficient:
+        # serialize model access while keeping file and keyword work concurrent.
+        self.embed_lock = threading.Lock()
         self.user_locks: dict[str, threading.RLock] = {}
 
     def _user_lock(self, user_id: str) -> threading.RLock:
@@ -115,7 +119,8 @@ class AMLAdapter:
         pending = memories if rebuild else [row for row in memories if not isinstance(row.get("vector"), list)]
         for start in range(0, len(pending), self.batch_size):
             chunk = pending[start:start + self.batch_size]
-            vectors = self.embedder.passages([row["content"] for row in chunk], self.batch_size)
+            with self.embed_lock:
+                vectors = self.embedder.passages([row["content"] for row in chunk], self.batch_size)
             if len(vectors) != len(chunk):
                 raise ValueError("embedder returned an unexpected number of vectors")
             for row, vector in zip(chunk, vectors, strict=True):
@@ -243,8 +248,9 @@ class AMLAdapter:
         semantic_queries = []
         if self.embedder and data.get("embedder") == self.embedder.identity:
             original = "\n".join([query, *options])
-            semantic_queries = [_vector(self.embedder.query(original))]
-            semantic_queries.extend(_vector(self.embedder.query(item)) for item in expand_query(original))
+            with self.embed_lock:
+                semantic_queries = [_vector(self.embedder.query(original))]
+                semantic_queries.extend(_vector(self.embedder.query(item)) for item in expand_query(original))
         active_memories = [row for row in data["memories"] if row.get("state", "active") == "active"]
         scored = []
         timestamps = sorted({str(row.get("timestamp") or "") for row in active_memories})

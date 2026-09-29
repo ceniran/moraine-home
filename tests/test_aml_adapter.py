@@ -1,5 +1,6 @@
 import json
 import threading
+import time
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -23,6 +24,24 @@ class FakeEmbedder:
     @staticmethod
     def _vector(text):
         return [text.count("苹果") + text.count("水果"), text.count("石头")]
+
+
+class TrackingEmbedder(FakeEmbedder):
+    def __init__(self):
+        self.guard = threading.Lock()
+        self.active = 0
+        self.peak = 0
+
+    def passages(self, texts, batch_size):
+        with self.guard:
+            self.active += 1
+            self.peak = max(self.peak, self.active)
+        try:
+            time.sleep(0.02)
+            return super().passages(texts, batch_size)
+        finally:
+            with self.guard:
+                self.active -= 1
 
 
 class AMLAdapterTest(unittest.TestCase):
@@ -179,6 +198,17 @@ class AMLAdapterTest(unittest.TestCase):
             results = list(pool.map(add, range(16)))
         self.assertTrue(all(result["success"] for result in results))
         self.assertEqual(len(list(root.glob("*.json"))), 16)
+
+    def test_parallel_users_serialize_local_model_access(self):
+        root = Path(self.temporary.name) / "model-limit"
+        embedder = TrackingEmbedder()
+        adapter = AMLAdapter(root, embedder)
+        def add(index):
+            return adapter.add({"request_id": f"r-{index}", "user_id": f"u-{index}", "session_id": "s",
+                                "messages": [{"role": "user", "content": f"并发向量记录{index}"}]})
+        with ThreadPoolExecutor(max_workers=16) as pool:
+            self.assertTrue(all(row["success"] for row in pool.map(add, range(16))))
+        self.assertEqual(embedder.peak, 1)
 
 
 if __name__ == "__main__": unittest.main()
