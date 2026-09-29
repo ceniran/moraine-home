@@ -64,6 +64,11 @@ class BetaServerTest(unittest.TestCase):
             self.request("/api/overview", authenticated=False)
         self.assertEqual(caught.exception.code, 401)
 
+        for header, value in (("Authorization", f"Token {self.token}"), ("X-Api-Key", self.token)):
+            request = Request(self.base + "/api/overview", headers={header: value}, method="GET")
+            with urlopen(request) as response:
+                self.assertEqual(response.status, 200)
+
         self.assertEqual(self.request("/api/overview")[1]["active"], 1)
         self.assertEqual(self.request("/api/calendar")[1]["items"][0]["date"], "2026-01-02")
         self.assertEqual(self.request("/api/search?query=%E6%A3%80%E7%B4%A2")[1]["mode"], "keyword")

@@ -122,7 +122,17 @@ def create_beta_server(env: dict[str, str] | None = None):
             self.wfile.write(body)
 
         def _authorized(self) -> bool:
-            return not token or self.headers.get("Authorization") == f"Bearer {token}"
+            if not token:
+                return True
+            authorization = self.headers.get("Authorization", "")
+            supplied = ""
+            if authorization.startswith("Bearer "):
+                supplied = authorization[7:]
+            elif authorization.startswith("Token "):
+                supplied = authorization[6:]
+            elif self.headers.get("X-Api-Key"):
+                supplied = self.headers.get("X-Api-Key", "")
+            return hmac.compare_digest(supplied, token)
 
         def _body(self) -> dict:
             length = int(self.headers.get("Content-Length", "0"))
