@@ -90,6 +90,8 @@ class AMLAdapterTest(unittest.TestCase):
                                   {"role": "assistant", "content": "书桌上放着石头"}]})
         result = adapter.search({"query": "早上吃的水果", "user_id": "alice", "top_k": 2})
         self.assertEqual(result["data"][0]["content"], "早餐吃了苹果")
+        stored = json.loads(adapter._file("alice").read_text(encoding="utf-8"))
+        self.assertTrue(all(str(row["vector"]).startswith("f32le:") for row in stored["memories"]))
         reloaded = AMLAdapter(root, FakeEmbedder())
         self.assertEqual(reloaded.search({"query": "水果", "user_id": "alice", "top_k": 1})["data"][0]["content"],
                          "早餐吃了苹果")

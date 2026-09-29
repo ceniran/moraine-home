@@ -3,10 +3,12 @@ from __future__ import annotations
 import hashlib
 import ctypes
 import gc
+import base64
 import json
 import math
 import os
 import re
+import struct
 import threading
 import time
 from pathlib import Path
@@ -110,8 +112,26 @@ class AMLEmbedder(Protocol):
     def query(self, text: str) -> Iterable[float]: ...
 
 
-def _vector(value: Iterable[float]) -> list[float]:
+PACKED_VECTOR_PREFIX = "f32le:"
+
+
+def _vector(value: Iterable[float] | str) -> list[float]:
+    if isinstance(value, str) and value.startswith(PACKED_VECTOR_PREFIX):
+        raw = base64.b64decode(value[len(PACKED_VECTOR_PREFIX):], validate=True)
+        if len(raw) % 4:
+            raise ValueError("packed embedding has invalid length")
+        return list(struct.unpack(f"<{len(raw) // 4}f", raw))
     return [round(float(item), 6) for item in value]
+
+
+def _pack_vector(value: Iterable[float]) -> str:
+    vector = [float(item) for item in value]
+    raw = struct.pack(f"<{len(vector)}f", *vector)
+    return PACKED_VECTOR_PREFIX + base64.b64encode(raw).decode("ascii")
+
+
+def _has_vector(value: object) -> bool:
+    return isinstance(value, list) or (isinstance(value, str) and value.startswith(PACKED_VECTOR_PREFIX))
 
 
 def _cosine(left: list[float], right: list[float]) -> float:
@@ -189,7 +209,13 @@ class AMLAdapter:
             return False
         memories = data["memories"]
         rebuild = data.get("embedder") != self.embedder.identity
-        pending = memories if rebuild else [row for row in memories if not isinstance(row.get("vector"), list)]
+        changed = False
+        if not rebuild:
+            for row in memories:
+                if isinstance(row.get("vector"), list):
+                    row["vector"] = _pack_vector(row["vector"])
+                    changed = True
+        pending = memories if rebuild else [row for row in memories if not _has_vector(row.get("vector"))]
         if pending:
             with self.embed_lock:
                 vectors = self.embedder.passages(
@@ -198,11 +224,11 @@ class AMLAdapter:
             if len(vectors) != len(pending):
                 raise ValueError("embedder returned an unexpected number of vectors")
             for row, vector in zip(pending, vectors, strict=True):
-                row["vector"] = _vector(vector)
+                row["vector"] = _pack_vector(vector)
         if rebuild or pending:
             data["embedder"] = self.embedder.identity
-            return True
-        return False
+            changed = True
+        return changed
 
     def _ensure_keywords(self, data: dict) -> bool:
         memories = data["memories"]
@@ -383,7 +409,7 @@ class AMLAdapter:
             option_character_overlap = sum(0.1 for character in option_characters if character in content)
             lexical = direct + option + character_overlap + option_character_overlap + intrinsic
             semantic = None
-            if semantic_queries and isinstance(row.get("vector"), list):
+            if semantic_queries and _has_vector(row.get("vector")):
                 vector = _vector(row["vector"])
                 original_semantic = _cosine(vector, semantic_queries[0])
                 expanded_semantic = max((_cosine(vector, item) for item in semantic_queries[1:]),
