@@ -14,7 +14,7 @@ from .query_planner import expand_query
 from .aml_shadow import ensure_shadow_graph, graph_bonuses
 
 
-KEYWORD_SCHEMA = "aml-keywords-v1"
+KEYWORD_SCHEMA = "aml-keywords-v2"
 STRUCTURE_SCHEMA = "aml-structure-v2"
 MAX_INTRINSIC_KEYWORDS = 128
 MAX_AUXILIARY_TERMS = 192
@@ -27,7 +27,7 @@ SIGNAL_PATTERNS = {
     "privacy": re.compile(r"隐私|私人|敏感|秘密|凭证|密码|令牌|授权|越权|披露|公开|拒绝|最小披露|privacy|private|sensitive|secret|credential|token|permission|disclos|refuse", re.I),
     "causal": re.compile(r"因为|由于|所以|因此|导致|使得|为了|通过|从而|原因|结果|because|therefore|caused|resulted|so that", re.I),
 }
-CURRENT_MARKERS = re.compile(r"目前|现在|如今|最新|最终|后来|改为|变成|不再|取消|恢复|current|latest|final|now", re.I)
+CURRENT_MARKERS = re.compile(r"当前|目前|现在|如今|最新|最终|后来|改为|变成|不再|取消|恢复|current|latest|final|now", re.I)
 HISTORICAL_MARKERS = re.compile(r"最初|以前|原来|曾经|起初|之前|old|former|initially|before", re.I)
 FORGET_MARKERS = re.compile(r"忘掉|遗忘|删除|清除|不要记得|不要再记|forget|delete|remove", re.I)
 GENERIC_TERMS = {"我们", "这个", "那个", "什么", "怎么", "怎样", "可以", "已经", "还是", "一个", "没有", "用户", "助手", "the", "and", "that", "with"}
@@ -53,6 +53,19 @@ def _signals(text: str) -> list[str]:
 
 def _salient_terms(text: str) -> list[str]:
     return [term for term in _keyword_terms(text) if term not in GENERIC_TERMS][:64]
+
+def _term_kind(term: str) -> str:
+    if DATE_PATTERN.search(term) or term in {"今天","昨天","明天","去年","今年","明年"}: return "time"
+    if term in {"现在","目前","后来","最终","最新","改为","变成","取消","恢复","current","latest","changed","cancelled","restored"}: return "state"
+    if term in {"朋友","同事","伴侣","家人","父母","女儿","儿子","负责","属于","friend","partner","family","owner","member"}: return "relation"
+    if any(character.isdigit() for character in term) or "_" in term: return "identifier"
+    return "topic"
+
+def _keyword_evidence(row: dict) -> list[dict]:
+    evidence=[]
+    for source,confidence,allowed,terms in (("intrinsic",1.0,["recall","event_match"],row.get("intrinsic_keywords") or []),("context",0.45,["recall"],row.get("auxiliary_terms") or [])):
+        for term in list(terms)[:64 if source=="intrinsic" else 32]: evidence.append({"term":str(term),"kind":_term_kind(str(term)),"source":source,"confidence":confidence,"allowed_uses":allowed})
+    return evidence
 
 
 def _time_value(value: object) -> float:
@@ -184,6 +197,7 @@ class AMLAdapter:
             row for row in memories
             if not isinstance(row.get("intrinsic_keywords"), list)
             or not isinstance(row.get("auxiliary_terms"), list)
+            or not isinstance(row.get("keyword_evidence"), list)
         ]
         if not pending:
             return False
@@ -203,6 +217,7 @@ class AMLAdapter:
             row["auxiliary_terms"] = [
                 term for term in dict.fromkeys(context) if term not in own
             ][:MAX_AUXILIARY_TERMS]
+            row["keyword_evidence"] = _keyword_evidence(row)
         data["keyword_schema"] = KEYWORD_SCHEMA
         return True
 
@@ -314,7 +329,7 @@ class AMLAdapter:
         scored = []
         timestamps = sorted({float(row.get("time_value") or _time_value(row.get("timestamp"))) for row in active_memories})
         timestamp_rank = {value: index / max(1, len(timestamps) - 1) for index, value in enumerate(timestamps)}
-        wants_current = bool(re.search(r"现在|目前|如今|最终|最后|后来|最新|current|latest|final", query, re.I))
+        wants_current = bool(re.search(r"当前|现在|目前|如今|最终|最后|后来|最新|current|latest|final", query, re.I))
         wants_time = bool(re.search(r"何时|什么时候|哪天|日期|多久|几天|间隔|先后|顺序|之前|之后|when|date|how long|before|after", query, re.I))
         asks_name = bool(re.search(r"称呼|叫什么|名字|called|name", query, re.I))
         query_word_set = set([*words, *option_words, *planned_words])

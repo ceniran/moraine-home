@@ -18,5 +18,15 @@ class AMLShadowTests(unittest.TestCase):
     def test_weak_single_term_similarity_does_not_create_edge(self):
         data={"memories":[row("a","苹果早餐",{"苹果","早餐"},1),row("b","苹果手机",{"苹果","手机"},2)]}
         ensure_shadow_graph(data); self.assertEqual(data["shadow_edges"],[])
+    def test_timestamps_alone_do_not_create_timeline_clique(self):
+        data={"memories":[row("a","庭审中法官宣读规则",{"庭审","法官","规则"},1),row("b","庭审中法官询问陪审团",{"庭审","法官","陪审团"},2),row("c","庭审中法官宣布休庭",{"庭审","法官","休庭"},3)]}
+        ensure_shadow_graph(data); self.assertEqual(data["shadow_edges"],[])
+    def test_unrelated_query_gets_no_generic_graph_bonus(self):
+        data={"memories":[row("a","因为内存不足所以任务失败",{"内存","任务","失败"},1,["causal"]),row("b","因为任务失败所以降低批量",{"任务","失败","批量"},2,["causal"])]}
+        ensure_shadow_graph(data); self.assertEqual(graph_bonuses(data,{"a":1.0,"b":0.8},"今天吃什么"),{})
+    def test_graph_bonus_is_confidence_weighted_and_not_additive(self):
+        data={"memories":[row("a","因为模型失败所以服务中断",{"模型","失败","服务"},1,["causal"]),row("b","因为模型失败所以降低批量",{"模型","失败","批量"},2,["causal"]),row("c","因为模型失败所以切换后端",{"模型","失败","后端"},3,["causal"])]}
+        ensure_shadow_graph(data); bonus=graph_bonuses(data,{"a":1.0,"b":0.9,"c":0.8},"模型为什么失败")
+        self.assertTrue(all(abs(item["bonus"])<=0.18 for item in bonus.values()))
 
 if __name__=="__main__": unittest.main()

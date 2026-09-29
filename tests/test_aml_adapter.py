@@ -112,10 +112,15 @@ class AMLAdapterTest(unittest.TestCase):
                                   {"role": "assistant", "content": "建议每周安排一次长距离训练"}]})
         stored = json.loads(adapter._file("alice").read_text(encoding="utf-8"))
         answer = stored["memories"][1]
-        self.assertEqual(stored["keyword_schema"], "aml-keywords-v1")
+        self.assertEqual(stored["keyword_schema"], "aml-keywords-v2")
         self.assertIn("长距", answer["intrinsic_keywords"])
         self.assertNotIn("马拉", answer["intrinsic_keywords"])
         self.assertIn("马拉", answer["auxiliary_terms"])
+        intrinsic = next(item for item in answer["keyword_evidence"] if item["term"] == "长距")
+        contextual = next(item for item in answer["keyword_evidence"] if item["term"] == "马拉")
+        self.assertEqual((intrinsic["source"], intrinsic["allowed_uses"]),
+                         ("intrinsic", ["recall", "event_match"]))
+        self.assertEqual((contextual["source"], contextual["allowed_uses"]), ("context", ["recall"]))
         result = adapter.search({"query": "马拉松训练建议", "user_id": "alice", "top_k": 2})
         self.assertEqual({row["content"] for row in result["data"]},
                          {"我最近在准备马拉松", "建议每周安排一次长距离训练"})
