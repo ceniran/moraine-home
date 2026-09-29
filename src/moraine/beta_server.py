@@ -44,7 +44,7 @@ def create_beta_server(env: dict[str, str] | None = None):
             int(env.get("MORAINE_AML_THREADS", env.get("MORAINE_THREADS", "2"))),
         )
     aml = AMLAdapter(env.get("MORAINE_AML_DATA_DIR", data_file.parent / "aml-evaluation"), aml_embedder,
-                     int(env.get("MORAINE_AML_BATCH_SIZE", "4")))
+                     int(env.get("MORAINE_AML_BATCH_SIZE", "4")), env.get("MORAINE_AML_DIAGNOSTIC_LOG") or None)
     action_drafts: dict[str, dict] = {}
     def search(query: str, limit: int) -> dict:
         if semantic_url:

@@ -6,6 +6,7 @@ import math
 import os
 import re
 import threading
+import time
 from pathlib import Path
 from typing import Iterable, Protocol
 
@@ -105,7 +106,8 @@ def _atomic(path: Path, value: dict) -> None:
 class AMLAdapter:
     """Isolated Add/Search contract for AML evaluation traffic."""
 
-    def __init__(self, root: str | Path, embedder: AMLEmbedder | None = None, batch_size: int = 4):
+    def __init__(self, root: str | Path, embedder: AMLEmbedder | None = None, batch_size: int = 4,
+                 diagnostic_log: str | Path | None = None):
         self.root = Path(root)
         self.embedder = embedder
         self.batch_size = max(1, int(batch_size))
@@ -114,7 +116,27 @@ class AMLAdapter:
         # sends concurrent users, so user-level locks alone are insufficient:
         # serialize model access while keeping file and keyword work concurrent.
         self.embed_lock = threading.Lock()
+        self.diagnostic_log = Path(diagnostic_log) if diagnostic_log else None
         self.user_locks: dict[str, threading.RLock] = {}
+
+    def _audit_search(self, body: dict, user_id: str, ranked: list[tuple]) -> None:
+        if not self.diagnostic_log:
+            return
+        record = {
+            "at": time.time(), "user_hash": hashlib.sha256(user_id.encode()).hexdigest()[:16],
+            "query": str(body.get("query") or "")[:4000],
+            "options": [str(item)[:1000] for item in list(body.get("options") or [])[:20]],
+            "top_k": int(body.get("top_k") or 0),
+            "results": [{"id": row["id"], "score": round(float(score), 6), **components}
+                        for score, _semantic, _lexical, row, components in ranked[:100]],
+        }
+        line = json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n"
+        with self.lock:
+            self.diagnostic_log.parent.mkdir(parents=True, exist_ok=True)
+            if self.diagnostic_log.exists() and self.diagnostic_log.stat().st_size > 20 * 1024 * 1024:
+                os.replace(self.diagnostic_log, self.diagnostic_log.with_suffix(".previous.jsonl"))
+            with self.diagnostic_log.open("a", encoding="utf-8") as handle:
+                handle.write(line)
 
     def _user_lock(self, user_id: str) -> threading.RLock:
         with self.lock:
@@ -331,9 +353,17 @@ class AMLAdapter:
                             + min(planned, 6) * 0.03 + min(auxiliary, 4) * 0.035
                             + min(signal_overlap, 2) * 0.09 + min(bridge_overlap, 3) * 0.025
                             + min(rare_exact, 3) * 0.12 + recency + naming + temporal + causal)
-                scored.append((combined, semantic, lexical, row))
+                components = {
+                    "semantic": round(float(semantic or 0.0), 6), "lexical": round(float(lexical), 6),
+                    "planned": planned, "auxiliary": auxiliary, "signal_overlap": signal_overlap,
+                    "bridge_overlap": bridge_overlap, "rare_exact": rare_exact,
+                    "recency": round(recency, 6), "temporal": round(temporal, 6),
+                    "causal": round(causal, 6), "naming": round(naming, 6),
+                }
+                scored.append((combined, semantic, lexical, row, components))
         scored.sort(key=lambda item: (item[0], item[2], float(item[3].get("time_value") or 0), item[3]["order"]), reverse=True)
+        self._audit_search(body, user_id, scored)
         maximum = max([max(score, 0.0) for score, *_ in scored], default=1.0) or 1.0
         return {"data": [{"id": row["id"], "content": row["content"], "score": max(score, 0.0) / maximum,
                            **({"created_at": row["timestamp"]} if row.get("timestamp") is not None else {})}
-                          for score, _semantic, _lexical, row in scored[:top_k]]}
+                          for score, _semantic, _lexical, row, _components in scored[:top_k]]}

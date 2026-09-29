@@ -189,6 +189,20 @@ class AMLAdapterTest(unittest.TestCase):
         self.assertEqual(stored["structure_schema"], "aml-structure-v2")
         self.assertEqual(stored["memories"][0]["temporal_facts"], ["9月3日"])
 
+    def test_diagnostic_log_records_query_and_score_components_without_content(self):
+        root = Path(self.temporary.name) / "diagnostics"
+        log = root / "search.jsonl"
+        adapter = AMLAdapter(root / "users", FakeEmbedder(), diagnostic_log=log)
+        adapter.add({"request_id": "one", "user_id": "alice", "session_id": "s1",
+                     "messages": [{"role": "user", "content": "因为下雨，会议改到周五"}]})
+        adapter.search({"query": "会议为什么改期", "options": ["因为下雨"], "user_id": "alice", "top_k": 1})
+        record = json.loads(log.read_text(encoding="utf-8"))
+        self.assertEqual(record["query"], "会议为什么改期")
+        self.assertNotEqual(record["user_hash"], "alice")
+        self.assertEqual(record["results"][0]["id"], adapter._read("alice")["memories"][0]["id"])
+        self.assertIn("semantic", record["results"][0])
+        self.assertNotIn("content", record["results"][0])
+
     def test_forgetting_hides_prior_evidence_but_keeps_auditable_command(self):
         root = Path(self.temporary.name) / "governance"
         adapter = AMLAdapter(root)
