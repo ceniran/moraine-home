@@ -117,6 +117,8 @@ class AMLAdapter:
         # sends concurrent users, so user-level locks alone are insufficient:
         # serialize model access while keeping file and keyword work concurrent.
         self.embed_lock = threading.Lock()
+        # Accept concurrent clients while bounding full-store jobs in memory.
+        self.workload_slots = threading.BoundedSemaphore(2)
         self.diagnostic_log = Path(diagnostic_log) if diagnostic_log else None
         self.user_locks: dict[str, threading.RLock] = {}
 
@@ -240,6 +242,10 @@ class AMLAdapter:
         return changed
 
     def add(self, body: dict) -> dict:
+        with self.workload_slots:
+            return self._add(body)
+
+    def _add(self, body: dict) -> dict:
         request_id = str(body.get("request_id") or "").strip()
         user_id = str(body.get("user_id") or "").strip()
         session_id = str(body.get("session_id") or "").strip()
@@ -270,6 +276,10 @@ class AMLAdapter:
         return {"success": True, "request_id": request_id, "user_id": user_id, "session_id": session_id}
 
     def search(self, body: dict) -> dict:
+        with self.workload_slots:
+            return self._search(body)
+
+    def _search(self, body: dict) -> dict:
         query = body.get("query")
         user_id = str(body.get("user_id") or "").strip()
         top_k = int(body.get("top_k") or 0)
