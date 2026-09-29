@@ -421,11 +421,11 @@ def create_beta_server(env: dict[str, str] | None = None):
             try:
                 if not self._authorized():
                     return self._json(401, {"error": "unauthorized"})
-                body = self._body()
                 if parsed.path == "/aml/add":
-                    return self._json(200, aml.add(body))
+                    return self._json(200, aml.add_lazy(self._body))
                 if parsed.path == "/aml/search":
-                    return self._json(200, aml.search(body))
+                    return self._json(200, aml.search_lazy(self._body))
+                body = self._body()
                 if parsed.path == "/api/candidates":
                     episode_id = str(body.get("episode_id") or "").strip()[:160]
                     semantic = search(" ".join((str(body.get("title") or ""), str(body.get("content") or ""))), 8)

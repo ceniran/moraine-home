@@ -12,7 +12,7 @@ import struct
 import threading
 import time
 from pathlib import Path
-from typing import Iterable, Protocol
+from typing import Callable, Iterable, Protocol
 
 from .query_planner import expand_query
 from .aml_shadow import ensure_shadow_graph, graph_bonuses
@@ -297,9 +297,12 @@ class AMLAdapter:
         return changed
 
     def add(self, body: dict) -> dict:
+        return self.add_lazy(lambda: body)
+
+    def add_lazy(self, body_factory: Callable[[], dict]) -> dict:
         with self.workload_slots:
             try:
-                return self._add(body)
+                return self._add(body_factory())
             finally:
                 _release_workload_memory()
 
@@ -334,9 +337,12 @@ class AMLAdapter:
         return {"success": True, "request_id": request_id, "user_id": user_id, "session_id": session_id}
 
     def search(self, body: dict) -> dict:
+        return self.search_lazy(lambda: body)
+
+    def search_lazy(self, body_factory: Callable[[], dict]) -> dict:
         with self.workload_slots:
             try:
-                return self._search(body)
+                return self._search(body_factory())
             finally:
                 _release_workload_memory()
 
