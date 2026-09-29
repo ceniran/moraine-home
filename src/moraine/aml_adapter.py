@@ -18,10 +18,10 @@ from .query_planner import expand_query
 from .aml_shadow import ensure_shadow_graph, graph_bonuses
 
 
-KEYWORD_SCHEMA = "aml-keywords-v2"
+KEYWORD_SCHEMA = "aml-keywords-v3"
 STRUCTURE_SCHEMA = "aml-structure-v2"
 MAX_INTRINSIC_KEYWORDS = 128
-MAX_AUXILIARY_TERMS = 192
+MAX_AUXILIARY_TERMS = 32
 
 SIGNAL_PATTERNS = {
     "relation": re.compile(r"关系|朋友|同事|伴侣|家人|父母|女儿|儿子|认识|成为|负责|属于|写信|寄信|约定|答应|relationship|friend|colleague|partner|family", re.I),
@@ -146,7 +146,7 @@ def _cosine(left: list[float], right: list[float]) -> float:
 def _atomic(path: Path, value: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(".tmp")
-    temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    temporary.write_text(json.dumps(value, ensure_ascii=False, separators=(",", ":")) + "\n", encoding="utf-8")
     os.replace(temporary, path)
 
 
@@ -237,7 +237,6 @@ class AMLAdapter:
             row for row in memories
             if not isinstance(row.get("intrinsic_keywords"), list)
             or not isinstance(row.get("auxiliary_terms"), list)
-            or not isinstance(row.get("keyword_evidence"), list)
         ]
         if not pending:
             return False
@@ -257,7 +256,7 @@ class AMLAdapter:
             row["auxiliary_terms"] = [
                 term for term in dict.fromkeys(context) if term not in own
             ][:MAX_AUXILIARY_TERMS]
-            row["keyword_evidence"] = _keyword_evidence(row)
+            row.pop("keyword_evidence", None)
         data["keyword_schema"] = KEYWORD_SCHEMA
         return True
 

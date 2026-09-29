@@ -8,7 +8,7 @@ from tempfile import TemporaryDirectory
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
-from moraine.aml_adapter import AMLAdapter
+from moraine.aml_adapter import AMLAdapter, _keyword_evidence
 from moraine.beta_server import create_beta_server
 
 
@@ -114,12 +114,14 @@ class AMLAdapterTest(unittest.TestCase):
                                   {"role": "assistant", "content": "建议每周安排一次长距离训练"}]})
         stored = json.loads(adapter._file("alice").read_text(encoding="utf-8"))
         answer = stored["memories"][1]
-        self.assertEqual(stored["keyword_schema"], "aml-keywords-v2")
+        self.assertEqual(stored["keyword_schema"], "aml-keywords-v3")
         self.assertIn("长距", answer["intrinsic_keywords"])
         self.assertNotIn("马拉", answer["intrinsic_keywords"])
         self.assertIn("马拉", answer["auxiliary_terms"])
-        intrinsic = next(item for item in answer["keyword_evidence"] if item["term"] == "长距")
-        contextual = next(item for item in answer["keyword_evidence"] if item["term"] == "马拉")
+        self.assertNotIn("keyword_evidence", answer)
+        evidence = _keyword_evidence(answer)
+        intrinsic = next(item for item in evidence if item["term"] == "长距")
+        contextual = next(item for item in evidence if item["term"] == "马拉")
         self.assertEqual((intrinsic["source"], intrinsic["allowed_uses"]),
                          ("intrinsic", ["recall", "event_match"]))
         self.assertEqual((contextual["source"], contextual["allowed_uses"]), ("context", ["recall"]))
