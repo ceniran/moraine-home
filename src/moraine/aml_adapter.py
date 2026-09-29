@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import hashlib
+import ctypes
+import gc
 import json
 import math
 import os
@@ -32,6 +34,17 @@ HISTORICAL_MARKERS = re.compile(r"最初|以前|原来|曾经|起初|之前|old|
 FORGET_MARKERS = re.compile(r"忘掉|遗忘|删除|清除|不要记得|不要再记|forget|delete|remove", re.I)
 GENERIC_TERMS = {"我们", "这个", "那个", "什么", "怎么", "怎样", "可以", "已经", "还是", "一个", "没有", "用户", "助手", "the", "and", "that", "with"}
 DATE_PATTERN = re.compile(r"(?:20\d{2}[年./-]\d{1,2}(?:[月./-]\d{1,2}日?)?|\d{1,2}月\d{1,2}日|(?:今天|昨天|前天|明天|后天|上周|下周|本周|去年|今年|明年))")
+
+
+def _release_workload_memory() -> None:
+    gc.collect()
+    try:
+        trim = ctypes.CDLL(None).malloc_trim
+        trim.argtypes = [ctypes.c_size_t]
+        trim.restype = ctypes.c_int
+        trim(0)
+    except (AttributeError, OSError):
+        pass
 
 
 def _keyword_terms(text: str) -> list[str]:
@@ -259,7 +272,10 @@ class AMLAdapter:
 
     def add(self, body: dict) -> dict:
         with self.workload_slots:
-            return self._add(body)
+            try:
+                return self._add(body)
+            finally:
+                _release_workload_memory()
 
     def _add(self, body: dict) -> dict:
         request_id = str(body.get("request_id") or "").strip()
@@ -293,7 +309,10 @@ class AMLAdapter:
 
     def search(self, body: dict) -> dict:
         with self.workload_slots:
-            return self._search(body)
+            try:
+                return self._search(body)
+            finally:
+                _release_workload_memory()
 
     def _search(self, body: dict) -> dict:
         query = body.get("query")
