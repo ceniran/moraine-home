@@ -12,6 +12,24 @@ from typing import Iterable, Protocol
 from .query_planner import expand_query
 
 
+KEYWORD_SCHEMA = "aml-keywords-v1"
+MAX_INTRINSIC_KEYWORDS = 128
+MAX_AUXILIARY_TERMS = 192
+
+
+def _keyword_terms(text: str) -> list[str]:
+    """Extract deterministic literal terms without calling a generative model."""
+    latin = [word.casefold() for word in re.findall(r"[A-Za-z0-9_]+", str(text))]
+    cjk_chunks = re.findall(r"[\u3400-\u9fff]+", str(text))
+    cjk = []
+    for chunk in cjk_chunks:
+        if len(chunk) == 1:
+            cjk.append(chunk)
+        else:
+            cjk.extend(chunk[index:index + 2] for index in range(len(chunk) - 1))
+    return list(dict.fromkeys([*latin, *cjk]))
+
+
 class AMLEmbedder(Protocol):
     @property
     def identity(self) -> str: ...
@@ -81,6 +99,34 @@ class AMLAdapter:
             return True
         return False
 
+    def _ensure_keywords(self, data: dict) -> bool:
+        memories = data["memories"]
+        rebuild = data.get("keyword_schema") != KEYWORD_SCHEMA
+        pending = memories if rebuild else [
+            row for row in memories
+            if not isinstance(row.get("intrinsic_keywords"), list)
+            or not isinstance(row.get("auxiliary_terms"), list)
+        ]
+        if not pending:
+            return False
+
+        context_terms: dict[str, list[str]] = {}
+        for row in memories:
+            context_id = str(row.get("request_id") or row.get("session_id") or "")
+            own_terms = _keyword_terms(row.get("content") or "")[:MAX_INTRINSIC_KEYWORDS]
+            row["intrinsic_keywords"] = own_terms
+            context_terms.setdefault(context_id, []).extend(own_terms)
+
+        for row in memories:
+            own = set(row["intrinsic_keywords"])
+            context_id = str(row.get("request_id") or row.get("session_id") or "")
+            context = context_terms.get(context_id, [])
+            row["auxiliary_terms"] = [
+                term for term in dict.fromkeys(context) if term not in own
+            ][:MAX_AUXILIARY_TERMS]
+        data["keyword_schema"] = KEYWORD_SCHEMA
+        return True
+
     def add(self, body: dict) -> dict:
         request_id = str(body.get("request_id") or "").strip()
         user_id = str(body.get("user_id") or "").strip()
@@ -96,12 +142,14 @@ class AMLAdapter:
                 raise ValueError("each message requires role=user|assistant and non-empty string content")
             stable = hashlib.sha256(f"{request_id}:{index}".encode()).hexdigest()[:24]
             normalized.append({"id": f"aml_{stable}", "session_id": session_id, "role": role,
-                               "content": content, "timestamp": message.get("timestamp"), "order": index})
+                               "content": content, "timestamp": message.get("timestamp"), "order": index,
+                               "request_id": request_id})
         with self.lock:
             data = self._read(user_id)
             if request_id not in data["requests"]:
                 data["memories"].extend(normalized)
                 data["requests"].append(request_id)
+                self._ensure_keywords(data)
                 self._ensure_vectors(data)
                 _atomic(self._file(user_id), data)
         return {"success": True, "request_id": request_id, "user_id": user_id, "session_id": session_id}
@@ -113,10 +161,8 @@ class AMLAdapter:
         if not isinstance(query, str) or not query.strip() or not user_id or not 1 <= top_k <= 100:
             raise ValueError("query, user_id, and top_k between 1 and 100 are required")
         def terms(text: str) -> tuple[list[str], list[str]]:
-            latin = [word.casefold() for word in re.findall(r"[A-Za-z0-9_]+", text)]
             cjk = "".join(re.findall(r"[\u3400-\u9fff]", text))
-            pairs = [cjk] if len(cjk) == 1 else [cjk[index:index + 2] for index in range(len(cjk) - 1)]
-            return latin + pairs, list(dict.fromkeys(cjk))
+            return _keyword_terms(text), list(dict.fromkeys(cjk))
         words, characters = terms(query)
         options = [str(item) for item in body.get("options") or []]
         option_terms = [terms(item) for item in options]
@@ -127,7 +173,8 @@ class AMLAdapter:
         planned_words = [word for words_in_plan, _ in planned_terms for word in words_in_plan]
         with self.lock:
             data = self._read(user_id)
-            if self._ensure_vectors(data):
+            changed = self._ensure_keywords(data)
+            if self._ensure_vectors(data) or changed:
                 _atomic(self._file(user_id), data)
         semantic_queries = []
         if self.embedder and data.get("embedder") == self.embedder.identity:
@@ -141,12 +188,17 @@ class AMLAdapter:
         asks_name = bool(re.search(r"称呼|叫什么|名字|called|name", query, re.I))
         for row in data["memories"]:
             content = row["content"].casefold()
+            intrinsic_keywords = set(row.get("intrinsic_keywords") or [])
+            auxiliary_terms = set(row.get("auxiliary_terms") or [])
+            all_query_words = set([*words, *option_words, *planned_words])
             direct = sum(2 for word in words if word in content)
             option = sum(1 for word in option_words if word in content)
             planned = sum(1 for word in planned_words if word in content)
+            intrinsic = len(all_query_words & intrinsic_keywords)
+            auxiliary = len(all_query_words & auxiliary_terms)
             character_overlap = sum(0.2 for character in characters if character in content)
             option_character_overlap = sum(0.1 for character in option_characters if character in content)
-            lexical = direct + option + character_overlap + option_character_overlap
+            lexical = direct + option + character_overlap + option_character_overlap + intrinsic
             semantic = None
             if semantic_queries and isinstance(row.get("vector"), list):
                 vector = _vector(row["vector"])
@@ -158,7 +210,8 @@ class AMLAdapter:
                 recency = timestamp_rank[str(row.get("timestamp") or "")] * 0.15 if wants_current else 0.0
                 naming = 0.08 if asks_name and re.search(r"称|叫|名字|called|named", content, re.I) else 0.0
                 combined = ((semantic or 0.0) + min(lexical, 4) * 0.08
-                            + min(planned, 6) * 0.02 + recency + naming)
+                            + min(planned, 6) * 0.02 + min(auxiliary, 4) * 0.035
+                            + recency + naming)
                 scored.append((combined, semantic, lexical, row))
         scored.sort(key=lambda item: (item[0], item[2], str(item[3].get("timestamp") or ""), item[3]["order"]), reverse=True)
         maximum = max([max(score, 0.0) for score, *_ in scored], default=1.0) or 1.0

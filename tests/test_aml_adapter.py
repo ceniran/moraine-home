@@ -84,5 +84,41 @@ class AMLAdapterTest(unittest.TestCase):
         result = semantic.search({"query": "早上吃的水果", "user_id": "alice", "top_k": 1})
         self.assertEqual(result["data"][0]["content"], "早餐吃了苹果")
 
+    def test_intrinsic_keywords_and_context_terms_are_stored_separately(self):
+        root = Path(self.temporary.name) / "keywords"
+        adapter = AMLAdapter(root)
+        adapter.add({"request_id": "context-1", "user_id": "alice", "session_id": "training",
+                     "messages": [{"role": "user", "content": "我最近在准备马拉松"},
+                                  {"role": "assistant", "content": "建议每周安排一次长距离训练"}]})
+        stored = json.loads(adapter._file("alice").read_text(encoding="utf-8"))
+        answer = stored["memories"][1]
+        self.assertEqual(stored["keyword_schema"], "aml-keywords-v1")
+        self.assertIn("长距", answer["intrinsic_keywords"])
+        self.assertNotIn("马拉", answer["intrinsic_keywords"])
+        self.assertIn("马拉", answer["auxiliary_terms"])
+        result = adapter.search({"query": "马拉松训练建议", "user_id": "alice", "top_k": 2})
+        self.assertEqual({row["content"] for row in result["data"]},
+                         {"我最近在准备马拉松", "建议每周安排一次长距离训练"})
+        adapter.add({"request_id": "context-2", "user_id": "alice", "session_id": "training",
+                     "messages": [{"role": "user", "content": "晚饭吃了面条"}]})
+        stored = json.loads(adapter._file("alice").read_text(encoding="utf-8"))
+        self.assertNotIn("马拉", stored["memories"][2]["auxiliary_terms"])
+
+    def test_keyword_metadata_is_backfilled_for_legacy_records(self):
+        root = Path(self.temporary.name) / "legacy-keywords"
+        adapter = AMLAdapter(root)
+        path = adapter._file("alice")
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps({"version": 1, "user_id": "alice", "requests": ["old"],
+                                    "memories": [{"id": "old-1", "session_id": "s1", "role": "user",
+                                                  "content": "喜欢蓝色", "timestamp": None, "order": 0},
+                                                 {"id": "old-2", "session_id": "s1", "role": "assistant",
+                                                  "content": "我记住了", "timestamp": None, "order": 1}]}),
+                        encoding="utf-8")
+        adapter.search({"query": "蓝色", "user_id": "alice", "top_k": 2})
+        stored = json.loads(path.read_text(encoding="utf-8"))
+        self.assertIn("蓝色", stored["memories"][0]["intrinsic_keywords"])
+        self.assertIn("蓝色", stored["memories"][1]["auxiliary_terms"])
+
 
 if __name__ == "__main__": unittest.main()
