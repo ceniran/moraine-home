@@ -13,7 +13,7 @@ from pathlib import Path
 from .admission import classify_candidate
 from .consolidate import consolidate
 from .continuity import DEFAULT_LAYER_BUDGETS, build_layered_context, build_wakeup_preview
-from .memory_tiering import derive_tiering_evidence, suggest_memory_tier
+from .memory_tiering import derive_tiering_evidence, infer_text_tiering, suggest_memory_tier
 
 
 def utc_now() -> str:
@@ -596,13 +596,29 @@ class BetaStore:
 
     def tiering_suggestions(self) -> list[dict]:
         snapshot = self.snapshot()
-        return [
-            {"candidate_id": row["id"], **suggest_memory_tier(
-                row, evidence=derive_tiering_evidence(row, snapshot)
-            )}
-            for row in snapshot["candidates"]
-            if row.get("state", "pending") == "pending"
-        ]
+        output = []
+        for row in snapshot["candidates"]:
+            if row.get("state", "pending") != "pending":
+                continue
+            explicit = suggest_memory_tier(row, evidence=derive_tiering_evidence(row, snapshot))
+            prose = dict(row.get("tiering") or {})
+            if prose.get("suggested_tier") in {"recent", "long_term"}:
+                hits, reasons = prose.get("keyword_hits") or {}, []
+                if hits.get("recent"):
+                    reasons.append("近期词：" + "、".join(hits["recent"]))
+                if hits.get("durable"):
+                    reasons.append("长期词：" + "、".join(hits["durable"]))
+                if (prose.get("semantic") or {}).get("vote"):
+                    reasons.append("本地语义邻居支持")
+                output.append({"candidate_id": row["id"], **explicit,
+                               "suggested_tier": prose["suggested_tier"],
+                               "confidence": prose.get("confidence", "low"),
+                               "reasons": reasons or ["文本分层证据"],
+                               "actionable": not prose.get("blockers") and not prose.get("protected"),
+                               "text_evidence": prose})
+            else:
+                output.append({"candidate_id": row["id"], **explicit, "text_evidence": prose})
+        return output
 
     def list_events(self, limit: int = 200) -> list[dict]:
         rows = self.snapshot()["events"]
@@ -632,7 +648,8 @@ class BetaStore:
         scored.sort(key=lambda item: (item[0], item[1]), reverse=True)
         return [{**deepcopy(row), "score": score / max(1, len(words) * 3), "search_mode": "keyword"} for score, _, row in scored[: max(1, min(int(limit), 100))]]
 
-    def _candidate_row(self, value: dict, now: str | None = None) -> dict:
+    def _candidate_row(self, value: dict, now: str | None = None, *, semantic_neighbors: list[dict] | None = None,
+                       semantic_mode: str = "unavailable") -> dict:
         title = str(value.get("title", "")).strip()
         content = str(value.get("content", "")).strip()
         if not title or not content:
@@ -654,10 +671,13 @@ class BetaStore:
         row["admission"] = classify_candidate(row)
         if value.get("expires_at"):
             row["expires_at"] = str(value["expires_at"])
+        row["tiering"] = infer_text_tiering(row, semantic_neighbors=semantic_neighbors, semantic_mode=semantic_mode)
+        row["tiering"]["persisted"] = True
         return row
 
-    def add_candidate(self, value: dict) -> dict:
-        row = self._candidate_row(value)
+    def add_candidate(self, value: dict, *, semantic_neighbors: list[dict] | None = None,
+                      semantic_mode: str = "unavailable") -> dict:
+        row = self._candidate_row(value, semantic_neighbors=semantic_neighbors, semantic_mode=semantic_mode)
         now = row["created_at"]
         with self.lock:
             data = self._read()
@@ -741,6 +761,7 @@ class BetaStore:
     def admit(self, candidate_ids: list[str], title: str | None = None, content: str | None = None,
               relations: dict | None = None, memory_tier: str | None = None,
               expires_at: str | None = None) -> dict:
+        automatic_tier = False
         ids = {str(value) for value in candidate_ids}
         if not ids:
             raise ValueError("candidate_ids is required")
@@ -770,6 +791,16 @@ class BetaStore:
             if memory_tier and any(str(row.get("kind") or "").casefold() in {"identity", "relationship", "boundary"}
                                    for row in selected):
                 raise ValueError("identity, relationship, and boundary candidates require specialized routing")
+            if memory_tier is None:
+                automatic = [row.get("tiering") or {} for row in selected]
+                tiers = {str(item.get("suggested_tier") or "") for item in automatic}
+                safe = all(not item.get("protected") and not item.get("blockers")
+                           and item.get("confidence") == "high" for item in automatic)
+                if safe and tiers == {"long_term"}:
+                    memory_tier, automatic_tier = "long_term", True
+                elif safe and tiers == {"recent"} and all(row.get("expires_at") for row in selected):
+                    memory_tier, automatic_tier = "recent", True
+                    expires_at = min(str(row["expires_at"]) for row in selected)
             ordered = sorted(selected, key=lambda row: row.get("occurred_at") or row.get("created_at") or "")
             candidate_snapshots = deepcopy(ordered)
             draft = self.consolidation_preview([row["id"] for row in ordered], relations)
@@ -796,7 +827,8 @@ class BetaStore:
             if memory_tier:
                 memory["memory_tier"] = memory_tier
                 memory["tier_confirmed_at"] = now
-                memory["tier_source"] = "human_or_agent_review"
+                memory["tier_source"] = ("automatic_keyword_semantic_evidence" if automatic_tier
+                                         else "human_or_agent_review")
             if expires_at:
                 memory["expires_at"] = str(expires_at)
             data["memories"].append(memory)

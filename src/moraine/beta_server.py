@@ -428,7 +428,9 @@ def create_beta_server(env: dict[str, str] | None = None):
                     return self._json(200, aml.search(body))
                 if parsed.path == "/api/candidates":
                     episode_id = str(body.get("episode_id") or "").strip()[:160]
-                    row = store.add_candidate(body)
+                    semantic = search(" ".join((str(body.get("title") or ""), str(body.get("content") or ""))), 8)
+                    row = store.add_candidate(body, semantic_neighbors=semantic.get("items") or [],
+                                              semantic_mode=str(semantic.get("mode") or "unavailable"))
                     return self._json(201, {**row, "write_guidance": write_guidance(
                         [row], episode_id=episode_id, episode_complete=body.get("episode_complete") is True,
                         batch=False,

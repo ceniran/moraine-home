@@ -164,6 +164,23 @@ class BetaStoreTest(unittest.TestCase):
         self.assertEqual(len(preview["removed"]), 1)
         self.assertEqual(store.snapshot(), before)
 
+    def test_candidate_persists_layer_evidence_and_safe_admission_auto_layers(self):
+        store = make_store(self.root)
+        candidate = store.add_candidate({"title": "项目更新", "content": "已经完成并发布长期维护入口",
+                                         "kind": "event"},
+                                        semantic_neighbors=[{"id": "m1", "memory_tier": "long_term", "score": 0.9}],
+                                        semantic_mode="semantic")
+        self.assertEqual(candidate["tiering"]["suggested_tier"], "long_term")
+        memory = store.admit([candidate["id"]])
+        self.assertEqual(memory["memory_tier"], "long_term")
+        self.assertEqual(memory["tier_source"], "automatic_keyword_semantic_evidence")
+
+    def test_protected_candidate_is_never_auto_layered(self):
+        store = make_store(self.root)
+        candidate = store.add_candidate({"title": "关系设想", "content": "如果以后成为伴侣怎么办", "kind": "event"})
+        memory = store.admit([candidate["id"]])
+        self.assertNotIn("memory_tier", memory)
+
     def test_profile_self_core_relations_and_export_round_trip(self):
         store = make_store(self.root)
         profile = store.update_profile({
