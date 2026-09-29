@@ -27,7 +27,9 @@ class FastEmbedder:
         return f"fastembed:{self.model_name}"
 
     def passages(self, texts: list[str], batch_size: int) -> list[np.ndarray]:
-        return list(self.model.passage_embed(texts, batch_size=batch_size, parallel=1))
+        # Avoid a fresh multiprocessing worker for every small Add batch.
+        # AMLAdapter already serializes access to the shared ONNX session.
+        return list(self.model.passage_embed(texts, batch_size=batch_size, parallel=None))
 
     def query(self, text: str) -> np.ndarray:
         return next(iter(self.model.query_embed([text])))
