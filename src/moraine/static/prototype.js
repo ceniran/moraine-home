@@ -1028,6 +1028,23 @@
     return `<article class="cleanup-candidate"><small>真实预览 · 尚未写入</small><strong>${escapeHtml(payload.result_preview?.title || payload.action)}</strong><p>${escapeHtml(payload.result_preview?.content || `将影响 ${payload.writes?.length || 0} 条记忆`)}</p><label>确认码 <b>${escapeHtml(payload.confirmation_code)}</b><input data-action-confirm-code maxlength="6" inputmode="numeric"></label><button type="button" data-confirm-action>${escapeHtml(label)}</button><p data-action-status>关闭或刷新会放弃草稿。</p></article>`;
   }
 
+  function executedActionStatus(payload, executed) {
+    const rollbackUntil = executed?.rollback?.available_until;
+    if (rollbackUntil) return `已生效；回退可用至 ${new Date(rollbackUntil).toLocaleString('zh-CN')}。`;
+    if (payload.action === 'restore_archive') return '已恢复到记忆库。';
+    if (payload.action === 'archive') return '已移入归档。';
+    return '已生效。';
+  }
+
+  async function refreshAfterConfirmedAction(payload, afterExecute, executed) {
+    if (afterExecute) await afterExecute(executed);
+    await refreshAfterMemoryChange();
+    if (payload.action === 'restore_archive' || payload.action === 'archive') {
+      await new Promise(resolve => window.setTimeout(resolve, 300));
+      await refreshAfterMemoryChange();
+    }
+  }
+
   function wireActionConfirmation(container, payload, afterExecute) {
     container.innerHTML = actionConfirmationMarkup(payload);
     container.querySelector('[data-confirm-action]').addEventListener('click', async event => {
@@ -1036,13 +1053,22 @@
         status.textContent = '确认码不匹配，没有写入。'; return;
       }
       event.currentTarget.disabled = true;
-      status.textContent = '正在写入并建立48小时回退点……';
+      status.textContent = '正在执行……';
+      let executed;
       try {
-        const executed = await realActionRequest('execute', { draft_id: payload.draft_id, confirmation_code: payload.confirmation_code });
-        status.textContent = `已生效；回退可用至 ${new Date(executed.rollback.available_until).toLocaleString('zh-CN')}。`;
-        if (afterExecute) await afterExecute(executed);
-        await refreshAfterMemoryChange();
-      } catch (error) { status.textContent = `没有执行：${error.message}`; event.currentTarget.disabled = false; }
+        executed = await realActionRequest('execute', { draft_id: payload.draft_id, confirmation_code: payload.confirmation_code });
+      } catch (error) {
+        status.textContent = `没有执行：${error.message}`;
+        event.currentTarget.disabled = false;
+        return;
+      }
+      status.textContent = `${executedActionStatus(payload, executed)} 正在刷新页面内容……`;
+      try {
+        await refreshAfterConfirmedAction(payload, afterExecute, executed);
+        status.textContent = executedActionStatus(payload, executed);
+      } catch (error) {
+        status.textContent = `${executedActionStatus(payload, executed)} 页面暂未刷新，请手动刷新查看。`;
+      }
     });
   }
 

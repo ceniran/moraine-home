@@ -201,6 +201,17 @@ class BetaServerTest(unittest.TestCase):
         self.assertEqual(self.request("/api/overview")[1]["candidates"], 1)
         self.assertEqual(self.request("/api/overview")[1]["active"], 1)
 
+    def test_action_confirmation_handles_receiptless_success_and_refresh_failure(self):
+        script = (Path(__file__).parents[1] / "src" / "moraine" / "static" / "prototype.js").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("executed?.rollback?.available_until", script)
+        self.assertIn("已恢复到记忆库。", script)
+        self.assertIn("refreshAfterConfirmedAction", script)
+        self.assertIn("正在刷新页面内容", script)
+        self.assertIn("页面暂未刷新，请手动刷新查看。", script)
+        self.assertNotIn("executed.rollback.available_until", script)
+
     def test_candidate_write_guidance_and_batch_endpoint(self):
         single = self.request("/api/candidates", "POST", {
             "title": "同日第一件事", "content": "完成接口，然后又修复页面",
