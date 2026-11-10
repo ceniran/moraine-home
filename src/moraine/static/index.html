@@ -9,7 +9,8 @@
   <meta name="mobile-web-app-capable" content="yes">
   <link rel="apple-touch-icon" sizes="180x180" href="./assets/moraine-apple-touch-icon.png?v=20260917-1">
   <title>Moraine · 记忆工作台</title>
-  <link rel="stylesheet" href="./prototype.css?v=20260929-native-avatar">
+  <link rel="stylesheet" href="./prototype.css?v=20261030-overview-reflow">
+  <link rel="stylesheet" href="./dwell-v2/memory-activity.css?v=20261028-2">
   <link rel="stylesheet" href="./auth.css?v=20260928-1">
   <script src="./auth.js?v=20260928-1"></script>
 </head>
@@ -127,48 +128,57 @@
         <p data-overview-subtitle>只读取统计与近期元数据。</p>
       </div>
 
-      <section class="panel lifecycle" aria-labelledby="lifecycleTitle">
-        <header>
-          <div><h2 id="lifecycleTitle">记忆权重</h2><p data-effective-count>读取中</p></div>
-          <button type="button" data-view-link="library">进入记忆库</button>
+      <section class="panel memory-activity" aria-labelledby="memoryActivityTitle" data-memory-activity>
+        <header class="memory-activity-head">
+          <div><small>MEMORY ACTIVITY</small><h2 id="memoryActivityTitle">记忆活动</h2></div>
+          <div class="t-tabs memory-activity-tabs" role="tablist" aria-label="记忆活动类型">
+            <span class="t-tabs-pill" aria-hidden="true"></span>
+            <button class="t-tab" type="button" role="tab" aria-selected="true" data-activity-metric="recall">召回</button>
+            <button class="t-tab" type="button" role="tab" aria-selected="false" data-activity-metric="intake">入库</button>
+            <button class="t-tab" type="button" role="tab" aria-selected="false" data-activity-metric="delete">删除</button>
+          </div>
         </header>
-        <button class="ring-row" type="button" data-view-link="library" aria-label="进入记忆库">
-          <span class="ring" role="img" data-lifecycle-ring aria-label="正在读取生命周期">
-            <span><strong class="t-digit-group" data-total-count>—</strong><small>有效记忆</small></span>
-          </span>
-          <span class="legend">
-            <span><i class="weight-core"></i><span>核心</span><strong data-weight-count="core">—</strong></span>
-            <span><i class="weight-important"></i><span>重要</span><strong data-weight-count="important">—</strong></span>
-            <span><i class="weight-stable"></i><span>稳定</span><strong data-weight-count="stable">—</strong></span>
-            <span><i class="weight-normal"></i><span>普通</span><strong data-weight-count="normal">—</strong></span>
-            <span><i class="weight-transient"></i><span>短暂</span><strong data-weight-count="transient">—</strong></span>
-          </span>
-        </button>
+        <div class="memory-activity-body">
+          <div class="memory-activity-summary" aria-live="polite">
+            <span class="t-text-swap" data-activity-label>本月召回</span>
+            <strong class="t-digit-group" data-activity-value>—</strong>
+            <small class="t-text-swap" data-activity-note>正在读取真实活动</small>
+            <p data-activity-change><i>·</i><b>等待同步</b></p>
+          </div>
+          <div class="memory-activity-chart">
+            <div class="memory-activity-meta"><span data-activity-month>—</span><p><i></i><span data-activity-legend>召回记录</span></p></div>
+            <div class="memory-activity-weekdays" aria-hidden="true"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
+            <div class="memory-activity-grid" data-activity-grid aria-label="本月记忆活动"></div>
+          </div>
+        </div>
+        <footer><span data-activity-foot>点击日期查看当天</span><small>只读统计 · 不评价记忆好坏</small></footer>
       </section>
 
-      <section class="panel changes" aria-labelledby="changesTitle">
+      <section class="panel backend-progress" aria-labelledby="backendProgressTitle" data-backend-progress>
         <header>
-          <h2 id="changesTitle">近期变化</h2>
-          <button type="button" data-view-link="library">查看全部</button>
+          <div><small>BACKEND WORK</small><h2 id="backendProgressTitle">后端工作进度</h2></div>
+          <span data-backend-state>正在同步</span>
         </header>
-        <ul data-overview-recent>
-          <li><span class="event-dot"></span><p><strong>读取中</strong><small>不展示记忆正文</small></p></li>
-        </ul>
+        <div class="backend-progress-line" aria-hidden="true"><i data-backend-progress-line></i></div>
+        <ol>
+          <li data-backend-step="store"><i></i><span><strong>读取记忆库</strong><small>等待后端响应</small></span></li>
+          <li data-backend-step="activity"><i></i><span><strong>汇总记忆活动</strong><small>等待后端响应</small></span></li>
+          <li data-backend-step="areas"><i></i><span><strong>整理分区索引</strong><small>等待后端响应</small></span></li>
+        </ol>
+        <footer><span data-backend-updated>尚未完成本轮同步</span><small>只展示真实完成状态</small></footer>
       </section>
 
-      <section class="panel attention" aria-labelledby="attentionTitle">
-        <header>
-          <h2 id="attentionTitle">待处理</h2>
-          <span class="count" data-pending-count>—</span>
-        </header>
-        <button type="button">
-          <span><strong>共同审阅</strong><small data-pending-reviews>读取中</small></span>
-          <i aria-hidden="true">›</i>
-        </button>
-        <button type="button">
-          <span><strong>新记忆候选</strong><small data-pending-candidates>读取中</small></span>
-          <i aria-hidden="true">›</i>
-        </button>
+      <section class="panel area-statistics" aria-labelledby="areaStatisticsTitle" data-area-statistics>
+        <header><div><small>SERVICE AREAS</small><h2 id="areaStatisticsTitle">记忆分区</h2></div><span data-area-period>本月入库</span></header>
+        <div class="area-statistics-summary" aria-live="polite"><span><small class="t-text-swap" data-area-label>全部分区</small><strong class="t-digit-group" data-area-total>—</strong></span><p class="t-text-swap" data-area-description>正在读取真实分区统计</p></div>
+        <div class="area-lollipop-chart" data-area-chart aria-label="各服务分区本月入库量与上月增减"></div>
+        <footer><span>点击分区查看详情</span><small>一条记忆可进入多个分区</small></footer>
+      </section>
+
+      <section class="panel usage-echo-overview" aria-labelledby="usageEchoTitle">
+        <header><div><small>MEMORY USE ECHO</small><h2 id="usageEchoTitle">最近回声</h2></div><span>旁路证据</span></header>
+        <p>记忆被想起以后，是否真的改变了下一次行动。</p>
+        <div class="usage-echo-recent" data-overview-echoes><small>正在读取最近的行动回声。</small></div>
       </section>
 
       <p class="system-check" data-overview-check>正在进行只读检查</p>
@@ -201,6 +211,17 @@
       <p class="candidate-intro">记忆形成之前的安静入口。本地语义模型只寻找相似线索，不替使用者裁决。</p>
       <p class="candidate-intro" data-candidate-flow-summary>正在核对今天的候选流向。</p>
       <section class="candidate-counts" aria-label="候选状态"><span><strong data-candidate-count="pending">—</strong><small>待判断</small></span><span><strong data-candidate-count="protected">—</strong><small>受保护</small></span><span><strong data-candidate-count="held">—</strong><small>静置</small></span></section>
+      <section class="panel real-area-preview" aria-labelledby="realAreaPreviewTitle">
+        <header><div><small>REAL MEMORY · ROUTING SIDECAR</small><h2 id="realAreaPreviewTitle">真实记忆分区工作台</h2></div><b>不改正文</b></header>
+        <p>关键词说明“聊到什么会想起它”，服务区域说明“做什么时让它来帮忙”。分区确认与自定义词表只写入独立路由索引，不改正式记忆正文、标签、指纹或向量。</p>
+        <form class="real-area-create" data-real-area-create>
+          <label>分区名<input name="label" required maxlength="40" placeholder="例如：创作"></label>
+          <label>关键词<input name="keywords" required placeholder="用逗号分开，例如：写作,文章,灵感"></label>
+          <button type="submit">新增自定义分区</button>
+        </form>
+        <label>选择真实记忆<select data-real-area-memory><option>正在读取真实记忆…</option></select></label>
+        <div data-real-area-card><p>正在建立只读预览。</p></div>
+      </section>
       <section class="candidate-browser panel"><header><div><small>EVENT BASKET</small><h2 data-candidate-position>正在读取</h2></div><div class="candidate-arrows"><button type="button" data-candidate-previous aria-label="上一个候选">←</button><button type="button" data-candidate-next aria-label="下一个候选">→</button></div></header><div data-candidate-card aria-live="polite"><p>正在读取真实候选。</p></div></section>
       <section class="candidate-workbench panel" aria-labelledby="candidateWorkbenchTitle">
         <header><div><small>MANUAL WORKSET</small><h2 id="candidateWorkbenchTitle">候选合并工作台</h2></div><b data-candidate-workset-count>0 条</b></header>
@@ -535,7 +556,7 @@
       </section>
       <section class="panel development-lines" aria-labelledby="developmentLinesTitle">
         <header><span><small>DEVELOPMENT LINES</small><h2 id="developmentLinesTitle">正在长向哪里</h2></span><b data-development-count>0 / 3</b></header>
-        <p>这是当前 <span data-agent-role-name>Agent</span> 自己愿意靠近的方向，会作为自主醒来时的一条轻量参考；不是任务、积分或进度条，也可以被忽略、暂停和改写。</p>
+        <p>这是当前 <span data-agent-role-name>Agent</span> 愿意靠近的方向，会作为自主醒来时的一条轻量参考；不是任务、积分或进度条，也可以被忽略、暂停和改写。</p>
         <div data-development-lines><div class="development-empty">正在读取发展线。</div></div>
       </section>
       <section class="study-keepsakes" aria-label="小机的四个私人收藏区域">
@@ -770,6 +791,7 @@
   <script src="./execution-plan.js?v=20260905-2"></script>
   <script src="./rehearsal-executor.js?v=20260904-1"></script>
   <script src="./relation-aware-draft.js?v=20260916-current-last1"></script>
-  <script src="./prototype.js?v=20260929-relation-loop"></script>
+  <script src="./dwell-v2/memory-areas.js?v=20261030-overview-reflow"></script>
+  <script src="./prototype.js?v=20261030-overview-reflow"></script>
 </body>
 </html>

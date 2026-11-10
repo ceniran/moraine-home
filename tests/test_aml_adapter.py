@@ -66,7 +66,7 @@ class AMLAdapterTest(unittest.TestCase):
 
     def test_add_search_idempotency_and_user_isolation(self):
         add = {"request_id": "r1", "user_id": "u1", "session_id": "s1",
-               "messages": [{"role": "user", "timestamp": 1704067200000, "content": "小然喜欢绿色石头"}]}
+               "messages": [{"role": "user", "timestamp": 1704067200000, "content": "用户喜欢绿色石头"}]}
         self.assertTrue(self.post("/aml/add", add)["success"]); self.post("/aml/add", add)
         result = self.post("/aml/search", {"query": "喜欢什么石头", "options": [], "user_id": "u1", "top_k": 100})
         self.assertEqual(len(result["data"]), 1)
@@ -153,12 +153,12 @@ class AMLAdapterTest(unittest.TestCase):
         root = Path(self.temporary.name) / "relations"
         adapter = AMLAdapter(root)
         adapter.add({"request_id": "relation-1", "user_id": "alice", "session_id": "s1",
-                     "messages": [{"role": "user", "content": "Kee和恩恩开始通过邮件往来"}]})
+                     "messages": [{"role": "user", "content": "林舟和助手开始通过邮件往来"}]})
         adapter.add({"request_id": "relation-2", "user_id": "alice", "session_id": "s2",
                      "messages": [{"role": "assistant", "content": "这段邮件往来后来让两人成为了笔友"}]})
-        result = adapter.search({"query": "Kee和恩恩是什么关系", "user_id": "alice", "top_k": 2})
+        result = adapter.search({"query": "林舟和助手是什么关系", "user_id": "alice", "top_k": 2})
         self.assertEqual({row["content"] for row in result["data"]},
-                         {"Kee和恩恩开始通过邮件往来", "这段邮件往来后来让两人成为了笔友"})
+                         {"林舟和助手开始通过邮件往来", "这段邮件往来后来让两人成为了笔友"})
 
     def test_current_state_prefers_later_explicit_update(self):
         root = Path(self.temporary.name) / "temporal"
@@ -169,6 +169,164 @@ class AMLAdapterTest(unittest.TestCase):
                      "messages": [{"role": "user", "timestamp": 2000, "content": "会议后来改为下午四点"}]})
         result = adapter.search({"query": "会议现在几点", "user_id": "alice", "top_k": 2})
         self.assertEqual(result["data"][0]["content"], "会议后来改为下午四点")
+        stored = adapter._read("alice")
+        self.assertEqual(len(stored["event_views"]), 1)
+        event = stored["event_views"][0]
+        self.assertEqual(event["relations"], ["evolution"])
+        self.assertEqual(event["timeline"][0]["stage"], "history")
+        self.assertEqual(event["timeline"][1]["stage"], "current")
+        self.assertEqual(event["current_id"], stored["memories"][1]["id"])
+
+    def test_missing_timestamps_use_ingest_order_not_request_id(self):
+        root = Path(self.temporary.name) / "ingest-order"
+        adapter = AMLAdapter(root)
+        adapter.add({"request_id": "z-old", "user_id": "alice", "session_id": "s1",
+                     "messages": [{"role": "user", "content": "会议最初定在下午两点"}]})
+        adapter.add({"request_id": "a-new", "user_id": "alice", "session_id": "s2",
+                     "messages": [{"role": "user", "content": "会议后来改为下午四点"}]})
+        stored = adapter._read("alice")
+        self.assertEqual(stored["event_views"][0]["current_id"], stored["memories"][1]["id"])
+        self.assertEqual([row["ingest_sequence"] for row in stored["memories"]], [0, 1])
+
+    def test_large_add_defers_derived_work_until_search(self):
+        root = Path(self.temporary.name) / "deferred-derived"
+        adapter = AMLAdapter(root, eager_derived_limit=1)
+        adapter.add({"request_id": "old", "user_id": "alice", "session_id": "s1",
+                     "messages": [{"role": "user", "timestamp": 1000,
+                                   "content": "会议最初定在下午两点"}]})
+        adapter.add({"request_id": "new", "user_id": "alice", "session_id": "s2",
+                     "messages": [{"role": "user", "timestamp": 2000,
+                                   "content": "会议后来改为下午四点"}]})
+        before = adapter._read("alice")
+        self.assertNotIn(before["memories"][1]["id"], before["shadow_indexed_ids"])
+        result = adapter.search({"query": "会议现在几点", "user_id": "alice", "top_k": 2})
+        self.assertEqual(result["data"][0]["content"], "会议后来改为下午四点")
+        after = adapter._read("alice")
+        self.assertEqual(len(after["event_views"]), 1)
+        self.assertIn(after["memories"][1]["id"], after["shadow_indexed_ids"])
+
+    def test_cold_large_search_embeds_only_a_query_relevant_batch(self):
+        root = Path(self.temporary.name) / "bounded-search-vectors"
+        keyword_only = AMLAdapter(root, eager_derived_limit=1)
+        for index, content in enumerate([
+            "书架上放着灰色石头", "窗边摆着白色石头", "早餐吃了红苹果",
+            "门口堆着黑色石头", "桌面留着蓝色石头", "抽屉装着绿色石头",
+        ]):
+            keyword_only.add({"request_id": f"row-{index}", "user_id": "alice",
+                              "session_id": f"s-{index}",
+                              "messages": [{"role": "user", "content": content}]})
+
+        semantic = AMLAdapter(root, FakeEmbedder(), eager_derived_limit=1, search_vector_limit=2)
+        result = semantic.search({"query": "早餐吃的水果", "user_id": "alice", "top_k": 3})
+        self.assertEqual(result["data"][0]["content"], "早餐吃了红苹果")
+        stored = semantic._read("alice")
+        vectorized = [row for row in stored["memories"]
+                      if str(row.get("vector", "")).startswith("f32le:")]
+        self.assertEqual(len(vectorized), 2)
+        self.assertIn("早餐吃了红苹果", {row["content"] for row in vectorized})
+
+    def test_automatic_review_folds_duplicate_but_preserves_raw_sources(self):
+        root = Path(self.temporary.name) / "automatic-duplicate"
+        adapter = AMLAdapter(root)
+        for index, timestamp in enumerate((1000, 2000, 3000)):
+            adapter.add({"request_id": f"duplicate-{index}", "user_id": "alice", "session_id": f"s{index}",
+                         "messages": [{"role": "user", "timestamp": timestamp,
+                                       "content": "项目当前入口是蓝色主页"}]})
+        stored = adapter._read("alice")
+        self.assertEqual(len(stored["memories"]), 3)
+        self.assertEqual(len(stored["event_views"]), 1)
+        result = adapter.search({"query": "项目当前入口", "user_id": "alice", "top_k": 10})
+        self.assertEqual([row["content"] for row in result["data"]], ["项目当前入口是蓝色主页"])
+
+    def test_same_subject_different_events_are_not_automatically_merged(self):
+        root = Path(self.temporary.name) / "automatic-separation"
+        adapter = AMLAdapter(root)
+        adapter.add({"request_id": "theme", "user_id": "alice", "session_id": "s1",
+                     "messages": [{"role": "user", "content": "小机更新了主页主题色"}]})
+        adapter.add({"request_id": "game", "user_id": "alice", "session_id": "s2",
+                     "messages": [{"role": "user", "content": "小机参加了周末拉密比赛"}]})
+        stored = adapter._read("alice")
+        self.assertEqual(stored["event_views"], [])
+        self.assertNotEqual(stored["memories"][0]["automatic_review"]["event_id"],
+                            stored["memories"][1]["automatic_review"]["event_id"])
+
+    def test_explicit_third_person_subjects_never_cross_merge(self):
+        root = Path(self.temporary.name) / "third-person-separation"
+        adapter = AMLAdapter(root)
+        adapter.add({"request_id": "alice", "user_id": "reader", "session_id": "s1",
+                     "messages": [{"role": "user", "timestamp": 1000,
+                                   "content": "Alice initially worked at Northwind as a designer."}]})
+        adapter.add({"request_id": "bob", "user_id": "reader", "session_id": "s2",
+                     "messages": [{"role": "user", "timestamp": 2000,
+                                   "content": "Bob later changed to working at Northwind as an engineer."}]})
+        stored = adapter._read("reader")
+        self.assertEqual(stored["event_views"], [])
+        self.assertEqual(stored["memories"][0]["subjects"], ["alice"])
+        self.assertEqual(stored["memories"][1]["subjects"], ["bob"])
+
+    def test_pronoun_inherits_subject_only_inside_same_session(self):
+        root = Path(self.temporary.name) / "third-person-pronouns"
+        adapter = AMLAdapter(root)
+        adapter.add({"request_id": "same-session", "user_id": "reader", "session_id": "story",
+                     "messages": [
+                         {"role": "user", "timestamp": 1000,
+                          "content": "Alice initially worked at Northwind as a designer."},
+                         {"role": "assistant", "timestamp": 2000,
+                          "content": "She later changed to working at Northwind as an engineer."},
+                     ]})
+        stored = adapter._read("reader")
+        self.assertEqual(len(stored["event_views"]), 1)
+        self.assertEqual(stored["memories"][1]["subjects"], ["alice"])
+        self.assertFalse(stored["memories"][1]["subject_ambiguous"])
+
+        adapter.add({"request_id": "other-session", "user_id": "reader", "session_id": "unknown",
+                     "messages": [{"role": "user", "timestamp": 3000,
+                                   "content": "She later changed to working at Northwind as a manager."}]})
+        stored = adapter._read("reader")
+        unknown = stored["memories"][-1]
+        self.assertEqual(unknown["subjects"], [])
+        self.assertTrue(unknown["subject_ambiguous"])
+        self.assertNotIn(unknown["id"], stored["event_views"][0]["source_ids"])
+
+    def test_strong_same_event_supplements_share_a_reviewed_event(self):
+        root = Path(self.temporary.name) / "automatic-supplement"
+        adapter = AMLAdapter(root)
+        adapter.add({"request_id": "one", "user_id": "alice", "session_id": "s1",
+                     "messages": [{"role": "user", "timestamp": 1000,
+                                   "content": "蓝湾发布会确定在周五下午举行，地点是北厅"}]})
+        adapter.add({"request_id": "two", "user_id": "alice", "session_id": "s2",
+                     "messages": [{"role": "assistant", "timestamp": 2000,
+                                   "content": "蓝湾发布会周五下午在北厅举行，入场需要蓝色证件"}]})
+        stored = adapter._read("alice")
+        self.assertEqual(len(stored["event_views"]), 1)
+        self.assertIn("supplement", stored["event_views"][0]["relations"])
+        result = adapter.search({"query": "蓝湾发布会入场需要什么", "user_id": "alice", "top_k": 2})
+        self.assertEqual(result["data"][0]["content"], "蓝湾发布会周五下午在北厅举行，入场需要蓝色证件")
+
+    def test_explicit_conflict_is_preserved_and_never_merged(self):
+        root = Path(self.temporary.name) / "automatic-conflict"
+        adapter = AMLAdapter(root)
+        adapter.add({"request_id": "yes", "user_id": "alice", "session_id": "s1",
+                     "messages": [{"role": "user", "content": "用户喜欢蓝色玻璃杯"}]})
+        adapter.add({"request_id": "no", "user_id": "alice", "session_id": "s2",
+                     "messages": [{"role": "user", "content": "用户不喜欢蓝色玻璃杯"}]})
+        stored = adapter._read("alice")
+        self.assertEqual(stored["event_views"], [])
+        self.assertEqual(len(stored["conflict_views"]), 1)
+        result = adapter.search({"query": "用户到底喜不喜欢蓝色玻璃杯，有没有冲突", "user_id": "alice", "top_k": 2})
+        self.assertEqual({row["content"] for row in result["data"]},
+                         {"用户喜欢蓝色玻璃杯", "用户不喜欢蓝色玻璃杯"})
+
+    def test_event_timeline_retrieves_both_stages_for_process_question(self):
+        root = Path(self.temporary.name) / "automatic-timeline"
+        adapter = AMLAdapter(root)
+        adapter.add({"request_id": "old", "user_id": "alice", "session_id": "s1",
+                     "messages": [{"role": "user", "timestamp": 1000, "content": "灯塔项目最初使用白色主题"}]})
+        adapter.add({"request_id": "new", "user_id": "alice", "session_id": "s2",
+                     "messages": [{"role": "user", "timestamp": 2000, "content": "灯塔项目后来改为蓝色主题"}]})
+        result = adapter.search({"query": "灯塔项目主题经历了什么变化过程", "user_id": "alice", "top_k": 2})
+        self.assertEqual({row["content"] for row in result["data"]},
+                         {"灯塔项目最初使用白色主题", "灯塔项目后来改为蓝色主题"})
 
     def test_epoch_milliseconds_sort_numerically_and_are_returned(self):
         root = Path(self.temporary.name) / "epoch-order"
@@ -195,7 +353,7 @@ class AMLAdapterTest(unittest.TestCase):
         self.assertEqual({row["content"] for row in result["data"]},
                          {"因为服务器内存不足，9月3日模型任务失败", "因此团队在9月5日把批量大小降到4"})
         stored = json.loads(adapter._file("alice").read_text(encoding="utf-8"))
-        self.assertEqual(stored["structure_schema"], "aml-structure-v2")
+        self.assertEqual(stored["structure_schema"], "aml-structure-v4")
         self.assertEqual(stored["memories"][0]["temporal_facts"], ["9月3日"])
 
     def test_diagnostic_log_records_query_and_score_components_without_content(self):
@@ -224,6 +382,8 @@ class AMLAdapterTest(unittest.TestCase):
         stored = json.loads(adapter._file("alice").read_text(encoding="utf-8"))
         self.assertEqual(stored["memories"][0]["state"], "forgotten")
         self.assertEqual(stored["memories"][0]["forgotten_by"], stored["memories"][1]["id"])
+        self.assertEqual(stored["memories"][1]["state"], "governance_only")
+        self.assertNotIn("请删除我的家庭住址", [row["content"] for row in result["data"]])
 
     def test_rule_and_privacy_evidence_survives_noise(self):
         root = Path(self.temporary.name) / "rules"

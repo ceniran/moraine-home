@@ -14,7 +14,8 @@ from pathlib import Path
 from .adviser import AdviserSecretStore
 from .aml_adapter import AMLAdapter
 from .beta_store import BetaStore
-from .candidate_capture import write_guidance
+from .event_match import propose_event_matches
+from .topic_router import TopicRegistry, TopicShadowLog, route_topics, workbench_shadow_view
 
 
 MAX_BODY = 2 * 1024 * 1024
@@ -33,7 +34,14 @@ def create_beta_server(env: dict[str, str] | None = None):
     seed_file = Path(env.get("MORAINE_BETA_SEED_FILE", package_root / "data" / "beta-seed.json"))
     semantic_url = env.get("MORAINE_SEMANTIC_URL", "").rstrip("/")
     semantic_token = env.get("MORAINE_SEMANTIC_TOKEN", "")
+    topic_routing_enabled = env.get("MORAINE_TOPIC_ROUTING_ENABLED", "").lower() in {"1", "true", "yes"}
+    private_topic_token = env.get("MORAINE_PRIVATE_TOPIC_TOKEN", "")
+    if topic_routing_enabled and not private_topic_token:
+        raise ValueError("MORAINE_PRIVATE_TOPIC_TOKEN is required when private topic routing is enabled")
     store = BetaStore(data_file, seed_file)
+    topic_registry = TopicRegistry(env.get("MORAINE_TOPIC_REGISTRY_FILE", data_file.parent / ".private-topics.json"))
+    topic_log = TopicShadowLog(env.get("MORAINE_TOPIC_SHADOW_LOG", data_file.parent / ".topic-shadow.jsonl"),
+                               int(env.get("MORAINE_TOPIC_LOG_RETENTION_DAYS", "45")))
     adviser = AdviserSecretStore(env.get("MORAINE_ADVISER_SECRET_FILE", data_file.parent / ".adviser-secret.json"))
     aml_embedder = None
     if env.get("MORAINE_AML_SEMANTIC", "").lower() in {"1", "true", "yes"}:
@@ -46,6 +54,34 @@ def create_beta_server(env: dict[str, str] | None = None):
     aml = AMLAdapter(env.get("MORAINE_AML_DATA_DIR", data_file.parent / "aml-evaluation"), aml_embedder,
                      int(env.get("MORAINE_AML_BATCH_SIZE", "4")), env.get("MORAINE_AML_DIAGNOSTIC_LOG") or None)
     action_drafts: dict[str, dict] = {}
+
+    def event_match_preview() -> dict:
+        latest = topic_log.latest()
+        rows = []
+        for candidate in store.list_candidates():
+            if candidate.get("state", "pending") != "pending":
+                continue
+            entry = latest.get(str(candidate.get("id") or ""))
+            if entry is None:
+                continue
+            visible = workbench_shadow_view(entry)
+            output = visible.get("router_output")
+            if not isinstance(output, dict):
+                continue
+            chosen = visible.get("final_topic_ids")
+            if isinstance(chosen, list):
+                topics = [{"topic_id": topic_id, "evidence_level": "reviewed", "vetoed": False}
+                          for topic_id in chosen if str(topic_id).strip()]
+            else:
+                topics = output.get("topics") or []
+            rows.append({**candidate, "topic_evidence": {"topics": topics}})
+        return {
+            "items": propose_event_matches(rows),
+            "keyword_role": "comparison_gate",
+            "topic_match_is_not_event_identity": True,
+            "automatic_merge": False,
+            "persisted": False,
+        }
     def search(query: str, limit: int) -> dict:
         if semantic_url:
             endpoint = f"{semantic_url}/search?{urllib.parse.urlencode({'query': query, 'limit': limit})}"
@@ -134,6 +170,10 @@ def create_beta_server(env: dict[str, str] | None = None):
                 supplied = self.headers.get("X-Api-Key", "")
             return hmac.compare_digest(supplied, token)
 
+        def _private_topic_authorized(self) -> bool:
+            supplied = self.headers.get("X-Moraine-Private-Token", "")
+            return bool(private_topic_token) and hmac.compare_digest(supplied, private_topic_token)
+
         def _body(self) -> dict:
             length = int(self.headers.get("Content-Length", "0"))
             if length > MAX_BODY:
@@ -144,6 +184,13 @@ def create_beta_server(env: dict[str, str] | None = None):
             return value
 
         def _static(self, request_path: str) -> None:
+            release_index = web_root / "dwell-release" / "index.html"
+            if request_path in {"", "/"} and release_index.is_file():
+                self.send_response(302)
+                self.send_header("Location", "/dwell-release/")
+                self.send_header("Cache-Control", "no-cache")
+                self.end_headers()
+                return
             relative = request_path.lstrip("/") or "index.html"
             target = (web_root / relative).resolve()
             if web_root not in target.parents and target != web_root:
@@ -181,8 +228,7 @@ def create_beta_server(env: dict[str, str] | None = None):
                          "importance": row.get("importance", .5), "state": row.get("state", "active"),
                          "occurred_at": row.get("occurred_at"), "created_at": row.get("created_at"),
                          "updated_at": row.get("updated_at"), "source": "Moraine beta",
-                         "protected": row.get("kind") in {"identity", "relationship"},
-                         "version_count": max(1, len(row.get("versions") or []) + 1)}
+                         "protected": row.get("kind") in {"identity", "relationship"}, "version_count": 1}
                         for row in rows]})
                 if parsed.path == "/api/dwell-v2/overview":
                     overview = store.overview()
@@ -199,7 +245,17 @@ def create_beta_server(env: dict[str, str] | None = None):
                                                        "pending_reviews": 0, "pending_candidates": len(candidates),
                                                        "weights": weights},
                                             "recent": overview.get("recent", []),
+                                            "recent_echoes": store.recent_memory_usage_echoes(3),
+                                            "activity": store.memory_activity(),
                                             "generated_at": overview.get("updated_at")})
+                if parsed.path == "/api/dwell-v2/memory-echoes":
+                    memory_id = query.get("memory_id", [None])[0]
+                    limit = max(1, min(500, int(query.get("limit", [50])[0])))
+                    if memory_id:
+                        return self._json(200, {"ok": True,
+                                                "summary": store.memory_usage_echo_summary(memory_id)})
+                    return self._json(200, {"ok": True,
+                                            "items": store.recent_memory_usage_echoes(limit)})
                 if parsed.path == "/api/dwell-v2/calendar":
                     month = query.get("month", [""])[0]
                     events = []
@@ -249,6 +305,19 @@ def create_beta_server(env: dict[str, str] | None = None):
                     return self._json(200, {"ok": True, "policy": {
                         "enabled": settings.get("candidate_retention_enabled", False),
                         "retention_hours": settings.get("candidate_retention_hours", 168)}})
+                if parsed.path == "/api/dwell-v2/candidate-experience-policy":
+                    settings = store.settings()
+                    return self._json(200, {"ok": True, "policy": {
+                        "mode": settings.get("candidate_experience_mode", "off"),
+                        "window_hours": 24, "adoption_threshold": 2, "max_recall": 1},
+                        "evidence_count": 0, "eligible": []})
+                if parsed.path == "/api/dwell-v2/candidate-schedule-policy":
+                    settings = store.settings()
+                    return self._json(200, {"ok": True, "policy": {
+                        "batch_times": settings.get("candidate_batch_times", ["11:55", "23:55"]),
+                        "settlement_time": settings.get("candidate_settlement_time", "23:55"),
+                        "stats_days": settings.get("candidate_stats_days", 6),
+                        "fresh_limit": 0, "backlog_limit": 0}})
                 if parsed.path == "/api/dwell-v2/portability/snapshots":
                     return self._json(200, {"ok": True, "snapshots": store.list_snapshots()})
                 if parsed.path == "/api/dwell-v2/portability/export":
@@ -367,13 +436,31 @@ def create_beta_server(env: dict[str, str] | None = None):
                         return self._json(404, {"error": "memory_not_found"})
                     return self._json(200, {"id": row.get("id"), "title": row.get("title"),
                                             "content": row.get("content", ""), "timeline": row.get("timeline") or [],
-                                            "integration_summary": row.get("content", "")})
+                                            "integration_summary": row.get("content", ""),
+                                            "usage_echo": store.memory_usage_echo_summary(memory_id)})
                 if parsed.path == "/api/memories":
                     return self._json(200, {"items": store.list_memories(query.get("state", ["all"])[0])})
                 if parsed.path == "/api/candidates/tiering":
                     return self._json(200, {"items": store.tiering_suggestions(), "persisted": False})
                 if parsed.path == "/api/candidates":
                     return self._json(200, {"items": store.list_candidates()})
+                if parsed.path == "/api/private/topic-routing/topics":
+                    if not self._private_topic_authorized():
+                        return self._json(403, {"error": "private_topic_capability_required"})
+                    topics, snapshot_id = topic_registry.load()
+                    return self._json(200, {"items": topics, "config_snapshot_id": snapshot_id})
+                if parsed.path == "/api/private/topic-routing/suggestion":
+                    if not self._private_topic_authorized():
+                        return self._json(403, {"error": "private_topic_capability_required"})
+                    candidate_id = query.get("candidate_id", [""])[0]
+                    entry = topic_log.get(candidate_id)
+                    if entry is None:
+                        return self._json(404, {"error": "topic_suggestion_not_found"})
+                    return self._json(200, workbench_shadow_view(entry))
+                if parsed.path == "/api/private/topic-routing/event-matches":
+                    if not self._private_topic_authorized():
+                        return self._json(403, {"error": "private_topic_capability_required"})
+                    return self._json(200, event_match_preview())
                 if parsed.path == "/api/events":
                     return self._json(200, {"items": store.list_events(int(query.get("limit", [200])[0]))})
                 if parsed.path == "/api/rollbacks":
@@ -394,7 +481,8 @@ def create_beta_server(env: dict[str, str] | None = None):
                     return self._json(200, store.continuity_settings())
                 if parsed.path == "/api/recall/layered":
                     context = store.layered_context(query.get("query", [""])[0],
-                                                    query.get("history", ["0"])[0] in {"1", "true", "yes"})
+                                                    query.get("history", ["0"])[0] in {"1", "true", "yes"},
+                                                    area=query.get("area", [None])[0])
                     if query.get("summary", ["0"])[0] in {"1", "true", "yes"}:
                         context["layers"] = [
                             {key: value for key, value in layer.items() if key != "items"}
@@ -427,25 +515,26 @@ def create_beta_server(env: dict[str, str] | None = None):
                     return self._json(200, aml.search_lazy(self._body))
                 body = self._body()
                 if parsed.path == "/api/candidates":
-                    episode_id = str(body.get("episode_id") or "").strip()[:160]
                     semantic = search(" ".join((str(body.get("title") or ""), str(body.get("content") or ""))), 8)
                     row = store.add_candidate(body, semantic_neighbors=semantic.get("items") or [],
                                               semantic_mode=str(semantic.get("mode") or "unavailable"))
-                    return self._json(201, {**row, "write_guidance": write_guidance(
-                        [row], episode_id=episode_id, episode_complete=body.get("episode_complete") is True,
-                        batch=False,
-                    )})
-                if parsed.path == "/api/candidates/batch":
-                    episode_id = str(body.get("episode_id") or "").strip()[:160]
-                    rows = store.add_candidates(body.get("candidates") or [], episode_id=episode_id)
-                    return self._json(201, {"items": rows, "count": len(rows), "write_guidance": write_guidance(
-                        rows, episode_id=episode_id, episode_complete=body.get("episode_complete") is True,
-                        batch=True,
-                    )})
+                    if topic_routing_enabled:
+                        try:
+                            topics, snapshot_id = topic_registry.load()
+                            result = route_topics(f"{row.get('title', '')}\n{row.get('content', '')}", topics, snapshot_id)
+                            topic_log.append(row["id"], result)
+                            row = {**row, "topic_shadow_status": "recorded"}
+                        except Exception:
+                            # Topic routing is advisory. A broken private registry
+                            # must never block the authoritative candidate inbox.
+                            row = {**row, "topic_shadow_status": "unavailable"}
+                    return self._json(201, row)
                 if parsed.path == "/api/dwell-v2/queue":
                     return self._json(200, {"ok": True, "queue": store.update_workbench_queue(
                         str(body.get("action") or ""), str(body.get("source_id") or ""),
                         str(body.get("neighbor_id") or ""))})
+                if parsed.path == "/api/dwell-v2/memory-echoes":
+                    return self._json(201, {"ok": True, "echo": store.add_memory_usage_echo(body)})
                 if parsed.path == "/api/dwell-v2/actions/preview":
                     action = str(body.get("action") or "")
                     if action == "auto_weight":
@@ -552,6 +641,14 @@ def create_beta_server(env: dict[str, str] | None = None):
                     return self._json(200, {"ok": True, "memory": memory,
                                             "concluded_candidate_ids": draft["candidate_ids"],
                                             "rollback": memory.get("rollback")})
+                if parsed.path == "/api/private/topic-routing/choice":
+                    if not self._private_topic_authorized():
+                        return self._json(403, {"error": "private_topic_capability_required"})
+                    candidate_id = str(body.get("candidate_id") or "").strip()
+                    topic_ids = body.get("topic_ids") or []
+                    if not candidate_id or not isinstance(topic_ids, list):
+                        raise ValueError("candidate_id and topic_ids list are required")
+                    return self._json(200, workbench_shadow_view(topic_log.record_choice(candidate_id, topic_ids)))
                 if parsed.path == "/api/candidates/admit":
                     row = store.admit(body.get("candidate_ids") or [], body.get("title"), body.get("content"),
                                       body.get("relations"), body.get("memory_tier"), body.get("expires_at"))
@@ -576,6 +673,10 @@ def create_beta_server(env: dict[str, str] | None = None):
                         return self._json(200, store.decide_candidate(parts[3], parts[4]))
                     if len(parts) == 5 and parts[4] == "route":
                         return self._json(200, store.route_candidate(parts[3], str(body.get("destination") or ""), body))
+                    if len(parts) == 5 and parts[4] == "service-areas":
+                        return self._json(200, store.set_candidate_areas(parts[3], add=list(body.get("add") or []),
+                            remove=list(body.get("remove") or []), actor=str(body.get("actor") or ""),
+                            reason=str(body.get("reason") or "")))
                 if parsed.path.startswith("/api/memories/"):
                     parts = parsed.path.split("/")
                     if len(parts) == 5 and parts[4] in {"archive", "restore"}:
@@ -630,6 +731,23 @@ def create_beta_server(env: dict[str, str] | None = None):
                     return self._json(200, {"ok": True, "policy": {
                         "enabled": updated["candidate_retention_enabled"],
                         "retention_hours": updated["candidate_retention_hours"]}})
+                if parsed.path == "/api/dwell-v2/candidate-experience-policy":
+                    updated = store.update_settings({**store.settings(),
+                        "candidate_experience_mode": str(body.get("mode") or "off")})
+                    return self._json(200, {"ok": True, "policy": {
+                        "mode": updated["candidate_experience_mode"],
+                        "window_hours": 24, "adoption_threshold": 2, "max_recall": 1},
+                        "evidence_count": 0, "eligible": []})
+                if parsed.path == "/api/dwell-v2/candidate-schedule-policy":
+                    updated = store.update_settings({**store.settings(),
+                        "candidate_batch_times": body.get("batch_times"),
+                        "candidate_settlement_time": body.get("settlement_time"),
+                        "candidate_stats_days": body.get("stats_days", 6)})
+                    return self._json(200, {"ok": True, "policy": {
+                        "batch_times": updated["candidate_batch_times"],
+                        "settlement_time": updated["candidate_settlement_time"],
+                        "stats_days": updated["candidate_stats_days"],
+                        "fresh_limit": 0, "backlog_limit": 0}})
                 if parsed.path == "/api/dwell-v2/identity-relation-routing-policy":
                     current = store.settings()
                     updated = store.update_settings({
@@ -731,7 +849,8 @@ def create_beta_server(env: dict[str, str] | None = None):
                 if parsed.path == "/api/recall/layered":
                     return self._json(200, store.layered_context(str(body.get("query") or ""),
                                                                  bool(body.get("include_history", False)),
-                                                                 dict(body.get("budgets") or {})))
+                                                                 dict(body.get("budgets") or {}),
+                                                                 str(body.get("area") or "") or None))
                 if parsed.path == "/api/wakeup/preview":
                     adviser_status = adviser.public()
                     return self._json(200, store.wakeup_preview(list(body.get("signals") or []),

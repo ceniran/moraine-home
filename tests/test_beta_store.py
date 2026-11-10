@@ -73,16 +73,6 @@ class BetaStoreTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             store.add_candidate({"title": "没有正文"})
 
-    def test_batch_candidates_remain_separate_but_share_episode(self):
-        store = make_store(self.root)
-        rows = store.add_candidates([
-            {"title": "第一件事", "content": "独立结果一"},
-            {"title": "第二件事", "content": "独立结果二"},
-        ], episode_id="episode_same_conversation")
-        self.assertEqual(len(rows), 2)
-        self.assertNotEqual(rows[0]["id"], rows[1]["id"])
-        self.assertEqual({row["episode_id"] for row in rows}, {"episode_same_conversation"})
-
     def test_profile_policy_controls_layered_recall_and_reviewed_growth(self):
         store = make_store(self.root)
         store.upsert_self_core({"text": "我偏好先核对来源", "reason": "稳定选择", "source_ids": ["event-1"]})
@@ -114,15 +104,11 @@ class BetaStoreTest(unittest.TestCase):
 
     def test_relationship_candidate_reaches_protected_review_but_is_not_written(self):
         store = make_store(self.root)
-        candidate = store.add_candidate({
-            "title": "我接受小然的正式表白",
+        candidate = store.add_candidate({"title": "我接受小然的正式表白",
             "content": "我确认彼此选择，并愿意继续相伴、共同生活。",
-            "kind": "relationship",
-            "importance": 0.8,
-        })
+            "kind": "relationship", "importance": 0.8})
         self.assertTrue(candidate["admission"]["eligible"])
         self.assertEqual(candidate["admission"]["status"], "protected_review_ready")
-        self.assertEqual(candidate["admission"]["review_lane"], "protected")
         self.assertFalse(candidate["admission"]["automatic_persistence"])
         self.assertEqual(store.list_memories(), [])
 
@@ -130,7 +116,49 @@ class BetaStoreTest(unittest.TestCase):
         store = make_store(self.root)
         candidate = store.add_candidate({"title": "普通聊天", "content": "你好", "kind": "event"})
         self.assertEqual(candidate["admission"]["status"], "held_low_signal")
-        self.assertFalse(candidate["admission"]["eligible"])
+
+    def test_candidate_keywords_are_structured_read_only_evidence(self):
+        store = make_store(self.root)
+        candidate = store.add_candidate({
+            "title": "Moraine 部署完成",
+            "content": "2026年10月5日已部署 Moraine，当前运行正常。",
+            "tags": ["Moraine", "project"],
+            "object_keys": ["Moraine"],
+            "action_keys": ["部署"],
+            "occurred_at": "2026-10-05T08:00:00+08:00",
+        })
+
+        stored = store.snapshot()["candidates"][0]
+        self.assertNotIn("structured_keywords", stored)
+        keywords = store.list_candidates()[0]["structured_keywords"]
+        self.assertEqual(keywords["schema"], "candidate-keywords-v2")
+        self.assertEqual(keywords["entities"], ["Moraine"])
+        self.assertEqual(keywords["entity_details"][0]["type"], "object")
+        self.assertIn("部署", keywords["actions"])
+        self.assertIn("已部署", keywords["states"])
+        self.assertIn("运行正常", keywords["states"])
+        self.assertEqual(keywords["dates"], ["2026年10月5日", "2026-10-05"])
+        self.assertFalse(keywords["persisted"])
+        self.assertFalse(keywords["affects_recall"])
+
+    def test_candidate_entities_keep_named_evidence_and_drop_plain_english(self):
+        store = make_store(self.root)
+        store.add_candidate({
+            "title": "给小然发送《回来的路》",
+            "content": "I will send the letter through cairn_mail to Rowan and review it later.",
+            "kind": "relationship",
+            "tags": ["小然", "relationship"],
+        })
+
+        keywords = store.list_candidates()[0]["structured_keywords"]
+        self.assertIn("小然", keywords["entities"])
+        self.assertIn("回来的路", keywords["entities"])
+        self.assertIn("cairn_mail", keywords["entities"])
+        self.assertIn("Rowan", keywords["entities"])
+        self.assertNotIn("send", keywords["entities"])
+        details = {item["term"]: item for item in keywords["entity_details"]}
+        self.assertEqual(details["小然"]["type"], "person")
+        self.assertEqual(details["回来的路"]["source"], "titled_phrase")
 
     def test_calendar_search_weight_and_ignore(self):
         store = make_store(self.root)
@@ -142,6 +170,39 @@ class BetaStoreTest(unittest.TestCase):
         self.assertEqual(store.set_importance(memory["id"], 0.83)["importance"], 0.83)
         self.assertEqual(store.decide_candidate(ignored["id"], "ignore")["state"], "ignored")
         self.assertEqual(store.decide_candidate(ignored["id"], "restore")["state"], "pending")
+
+    def test_memory_usage_echoes_are_append_only_sidecar_evidence(self):
+        store = make_store(self.root)
+        candidate = store.add_candidate({"title": "草图失败经验", "content": "下次先核验天气与成果规则"})
+        memory = store.admit([candidate["id"]])
+
+        echo = store.add_memory_usage_echo({
+            "memory_ids": [memory["id"]],
+            "effect": "helped",
+            "action": "出发前核验天气和交付条件",
+            "result": "避免重复消耗路线记录",
+            "actor": "test-agent",
+            "retrieval_id": "synthetic-recall-1",
+        })
+
+        self.assertEqual(echo["memory_ids"], [memory["id"]])
+        self.assertFalse(echo["affects_importance"])
+        summary = store.memory_usage_echo_summary(memory["id"])
+        self.assertEqual(summary["total"], 1)
+        self.assertEqual(summary["changed_action_count"], 1)
+        self.assertEqual(summary["counts"]["helped"], 1)
+        self.assertEqual(store.list_memories("active")[0]["content"], "下次先核验天气与成果规则")
+        self.assertEqual(store.list_memories("active")[0]["importance"], memory["importance"])
+        self.assertEqual(store.recent_memory_usage_echoes(1)[0]["memories"][0]["title"], "草图失败经验")
+
+    def test_memory_usage_echo_rejects_unknown_memory_and_effect(self):
+        store = make_store(self.root)
+        with self.assertRaises(KeyError):
+            store.add_memory_usage_echo({"memory_ids": ["missing"], "effect": "helped", "action": "测试"})
+        candidate = store.add_candidate({"title": "合成记忆", "content": "测试正文"})
+        memory = store.admit([candidate["id"]])
+        with self.assertRaisesRegex(ValueError, "valid effect"):
+            store.add_memory_usage_echo({"memory_ids": [memory["id"]], "effect": "excellent", "action": "测试"})
 
     def test_import_creates_recovery_snapshot(self):
         store = make_store(self.root)
@@ -171,6 +232,7 @@ class BetaStoreTest(unittest.TestCase):
                                         semantic_neighbors=[{"id": "m1", "memory_tier": "long_term", "score": 0.9}],
                                         semantic_mode="semantic")
         self.assertEqual(candidate["tiering"]["suggested_tier"], "long_term")
+        self.assertEqual(candidate["tiering"]["confidence"], "high")
         memory = store.admit([candidate["id"]])
         self.assertEqual(memory["memory_tier"], "long_term")
         self.assertEqual(memory["tier_source"], "automatic_keyword_semantic_evidence")

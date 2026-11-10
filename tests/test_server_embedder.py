@@ -17,7 +17,7 @@ class FastEmbedderTests(unittest.TestCase):
         embedder = FastEmbedder.__new__(FastEmbedder)
         embedder.model = FakeModel()
         self.assertEqual(embedder.passages(["memory"], 4), [[1.0]])
-        self.assertIsNone(embedder.model.call[1]["parallel"])
+        self.assertEqual(embedder.model.call[1]["parallel"], None)
 
 
 if __name__ == "__main__":

@@ -1,74 +1,103 @@
-# Moraine 升级指南
+# Moraine 安全升级说明
 
-本文适用于已经部署过 Moraine、希望升级到 `v0.3.0-beta.12` 的用户。升级不会要求重建记忆库，但操作前仍应先从界面导出数据，或复制持久化数据目录。
+本说明覆盖源码、Python wheel、systemd、Docker Compose 与 Zeabur 部署。升级只替换程序文件，不应删除或重新初始化数据目录。
 
-## 升级前必须保留
+## 所有部署方式都先做这三件事
 
-- 数据目录或容器持久卷；
-- `.env`、访问令牌和平台 Secret；
-- 最近一次导出的 JSON 备份。
+1. 在工作台设置页建立快照，并下载一份完整导出；
+2. 记下当前版本和部署目录；
+3. 保留原数据目录、持久卷、`.env`、访问令牌与其他 Secret。不要执行 `docker compose down -v`，不要删除 `data/`，也不要重新生成令牌覆盖旧配置。
 
-不要执行 `docker compose down -v`，也不要删除或覆盖现有数据目录。
-
-## Git 源码部署
+升级完成后打开工作台，并检查：
 
 ```bash
-git status
+curl http://127.0.0.1:4790/api/health
+```
+
+响应应包含 `"ok": true`。远程实例仍应通过 HTTPS 与鉴权访问，不要把 4790 端口直接开放到公网。
+
+## GitHub 源码版
+
+在原仓库目录执行：
+
+```bash
+git status --short
 git pull --ff-only origin main
 . .venv/bin/activate
 python -m pip install -e '.[mcp]'
 ```
 
-随后按原来的方式重启 Moraine 服务。若 `git status` 显示本地修改，请先备份并处理这些修改，不要强行覆盖。
+如果 `git status` 显示本地修改，先自行备份或提交，不要用 `reset --hard` 覆盖它们。直接使用 `scripts/run-beta.sh` 的本机实例，停止旧进程后重新运行脚本；由 systemd 管理时按下方重启服务。
 
-## Wheel 安装
+## Release wheel 版
 
-下载新 Release 中的 wheel，然后在原虚拟环境执行：
-
-```bash
-python -m pip install --upgrade ./moraine_home-0.3.0b4-py3-none-any.whl
-```
-
-安装完成后重启原服务。
-
-## systemd 部署
-
-先按 Git 或 wheel 方式更新代码，再执行：
+从 GitHub Release 下载与你的 Python 环境匹配的新 wheel，然后在原虚拟环境中执行：
 
 ```bash
-sudo systemctl restart moraine-beta
-sudo systemctl status moraine-beta --no-pager
+. .venv/bin/activate
+python -m pip install --upgrade ./moraine_home-0.3.0b14-py3-none-any.whl
 ```
 
-服务名若不是 `moraine-beta`，请使用安装时采用的名称。
+不要新建数据目录。安装完成后按原方式重新启动 `moraine-beta`；若同时使用 MCP，也重启 MCP 客户端以重新载入工具。
 
-## Docker Compose 部署
+## 自管 VPS / systemd
 
-使用远程镜像时拉取新镜像；从源码构建时重新构建，然后仅重建容器：
+先用源码或 wheel 方法更新程序，再执行：
+
+```bash
+sudo systemctl restart moraine-beta.service
+sudo systemctl restart moraine.service
+systemctl --no-pager --full status moraine-beta.service moraine.service
+```
+
+只重启实际启用的服务。原环境文件和受保护凭证文件继续复用，不要复制到命令行、聊天或仓库。
+
+## Docker Compose
+
+如果使用发布镜像：
 
 ```bash
 docker compose pull
 docker compose up -d
 ```
 
-或：
+如果从仓库本地构建：
 
 ```bash
+git pull --ff-only origin main
 docker compose build --pull
 docker compose up -d
 ```
 
-确认 compose 文件仍挂载原来的数据卷，并保留原 Secret。
+随后运行 `docker compose ps` 和健康检查。必须保留原 volume 与 Secret；不要使用 `down -v`。
 
-## Zeabur 等托管平台
+## Zeabur
 
-从仓库部署的实例选择最新 Release 或 `main` 后重新部署；从镜像部署的实例更新镜像标签后重新部署。不要新建空卷替代旧卷，环境变量和 Secret 也应继续沿用。
+- GitHub 部署：在服务控制台选择最新 Release 标签或最新 `main`，触发一次 Redeploy；
+- Docker 部署：更新镜像标签后重新部署；
+- 检查持久卷挂载路径与所有 Secret 仍然存在，再查看健康检查与启动日志。
 
-## 本版变化
+不要删除旧服务后新建，否则可能丢失未挂入持久卷的数据。
 
-- 换用统一的 Moraine 前端，同时保留旧界面于 `/legacy-v1/`；
-- 新前端通过兼容接口读取原有记忆、候选、日历、身份与关系数据；
-- 候选整合继续要求先预览、再输入确认码执行；
-- 默认身份文案改为中性的 `Agent`，不会把部署者固定写成 Cairn 或 Codex。
+## 回退
 
-升级后请先检查 `/api/health`，再打开首页确认原有记忆数量、候选数量和关系节点。若需要回滚，恢复升级前的代码或 wheel 并继续挂载同一份数据；不要导入空白数据覆盖原库。
+程序升级失败时，先停止服务，把代码、wheel 或镜像退回升级前的版本，再使用原数据目录启动。不要为解决启动错误直接清空数据。
+
+只有新版本确实迁移了数据且无法向后读取时，才从升级前快照恢复；恢复前仍应保留当前故障状态的副本，便于排查。
+
+## v0.3.0-beta.14 的变化
+
+- 默认入口切换为新的 `dwell-release` 前端，旧 `/dwell-v2/` 继续作为可回退入口；
+- 新版前端与旧版回退资源都随 wheel 分发，不依赖源码目录或私人 Dwell 部署；
+- 新增通用小机主页、活动记录、重做后的事件日历、工作台后端接入进度与发行边界适配层；
+- 私人日记、书房、发展线、定时唤醒与 Agent 后端修订队列不进入通用发行包；
+- 增加发行版后端契约、小机说明书、旧版功能差异与安全回退说明。
+
+## v0.3.0-beta.6 的变化
+
+- 纯净内测版采用与 Dwell 记忆页一致的完整前端结构、原版样式与移动端布局；
+- 总览、事件日历、候选箱和记忆库通过隔离适配器读取 Moraine 数据；
+- 补回合成候选的预览、确认码执行和可回退入库链路；
+- 旧界面保留在发布包的 `legacy-v1/` 中，便于出现前端兼容问题时排查；
+- 不迁移或读取任何私人 Dwell 数据，也不改变既有 Moraine 数据目录。
+- 实例空间标题读取各部署者自己的资料，未设置时显示 `Moraine`；关系网中心类型读取实例配置，未设置时显示 `Agent`，不再固定为 Cairn 或 Codex。

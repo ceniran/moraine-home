@@ -16,6 +16,21 @@ An integration should initially store the raw conversation outside the active lo
 fact set. A language model may propose a relationship, but only the authoritative store's
 review path may create or supersede an active record.
 
+### Keyword-gated event comparison
+
+`propose_event_matches()` can compare pending candidates after deterministic topic routing.
+A shared topic is only a comparison gate; it is never evidence that two candidates are the
+same event. The integration may provide explicit `object_keys` and `action_keys`, while
+time proximity supplies bounded context. Missing object identity or action continuity is
+returned as a blocker instead of being guessed from prose. Protected identity, relationship,
+and boundary candidates always retain a review blocker.
+
+The result is a read-only, reversible suggestion with `automatic_merge: false` and
+`persisted: false`. Vetoed topics do not open the gate, term frequency does not add weight,
+and the function never changes a basket or admission decision. An unattended admission
+therefore keeps candidates separate unless an authoritative integration has a separately
+reviewed rule for merging them.
+
 ## Cross-memory experience threads
 
 Episodes keep nearby observations together; supersession keeps one record's revision

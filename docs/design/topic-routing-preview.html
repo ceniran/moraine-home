@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Moraine · 候选箱主题建议（设计预览）</title>
+<style>
+:root{--ink:#242720;--muted:#74786f;--line:#dcded6;--moss:#5d6f61;
+  font-family:Inter,"Noto Sans SC",system-ui,sans-serif}
+*{box-sizing:border-box}
+body{margin:0;background:linear-gradient(180deg,#f7f7f4,#f1f3ef);color:var(--ink)}
+.shell{width:min(100%,760px);margin:auto;padding:26px 18px 60px}
+.intro{padding:12px 14px;border:1px dashed rgba(118,130,122,.45);border-radius:14px;
+  color:var(--muted);font-size:12px;line-height:1.7;margin-bottom:22px}
+.intro b{color:var(--ink)}
+h1{font:500 30px/1.15 Georgia,serif;margin:0 0 6px}
+.lede{color:var(--muted);font-size:13px;margin:0 0 24px;line-height:1.7}
+.demo{margin-bottom:26px}
+.demo>header{margin-bottom:9px}
+.demo h2{font-size:14px;margin:0;color:var(--moss);letter-spacing:.02em}
+.demo>header p{margin:3px 0 0;font-size:11.5px;color:var(--muted)}
+.item{display:grid;grid-template-columns:auto 1fr;gap:10px;padding:14px;
+  border:1px solid var(--line);border-radius:18px;background:rgba(255,255,252,.8)}
+.item input{margin-top:4px;accent-color:var(--moss)}
+.item h3{font-size:15px;margin:0 0 5px}
+.item-meta{font-size:11px;color:var(--muted)}
+.item>span>p{font-size:13px;line-height:1.65;color:#555a51;margin:7px 0 0}
+footer{margin-top:40px;text-align:center;color:#9a9d96;font:italic 13px Georgia,serif}
+/* Topic routing shadow suggestions.
+ *
+ * Suggestions are a read-only projection, so they are rendered as a recessed
+ * well rather than a raised card: visually they can never be mistaken for
+ * something the user already confirmed.
+ */
+
+.topic-box {
+  margin: 10px 0 0;
+  padding: 11px 12px 10px;
+  border: 1px solid rgba(84, 96, 88, 0.16);
+  border-radius: 14px;
+  background: rgba(40, 48, 43, 0.045);
+  box-shadow: inset 0 1px 3px rgba(48, 58, 51, 0.09);
+  color: #3f463f;
+}
+
+.topic-box.is-quiet,
+.topic-box.is-control {
+  background: rgba(40, 48, 43, 0.03);
+}
+
+.topic-badge {
+  display: inline-block;
+  margin-bottom: 6px;
+  padding: 2px 8px;
+  border: 1px dashed rgba(84, 96, 88, 0.36);
+  border-radius: 999px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: #6c7a70;
+}
+
+.topic-state {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.topic-note {
+  margin: 4px 0 0;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: #79837b;
+}
+
+.topic-primary {
+  margin: 7px 0 0;
+  font-size: 12.5px;
+}
+
+.topic-reasons {
+  margin: 7px 0 0;
+  padding-left: 16px;
+  font-size: 11.5px;
+  line-height: 1.65;
+  color: #5c6660;
+}
+
+.topic-reason-name {
+  margin-right: 5px;
+  font-weight: 600;
+  color: #4a544c;
+}
+
+.topic-excerpt {
+  margin: 8px 0 0;
+  padding: 8px 9px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+  line-height: 1.7;
+  word-break: break-word;
+}
+
+mark.topic-hit {
+  padding: 0 2px;
+  border-radius: 3px;
+  background: rgba(150, 178, 152, 0.42);
+  color: inherit;
+}
+
+/* ---- topic chips ---- */
+
+.topic-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.topic-chip {
+  min-height: 34px;
+  padding: 5px 11px;
+  border: 1px solid rgba(84, 96, 88, 0.26);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.62);
+  color: #3f463f;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
+.topic-chip.is-picked {
+  border-color: rgba(93, 111, 97, 0.7);
+  background: rgba(139, 166, 142, 0.3);
+  font-weight: 600;
+}
+
+.topic-chip:focus-visible,
+.topic-action:focus-visible,
+.topic-token-form input:focus-visible {
+  outline: 2px solid #5d6f61;
+  outline-offset: 2px;
+}
+
+.topic-empty {
+  margin: 9px 0 0;
+  font-size: 11.5px;
+  color: #828c84;
+}
+
+/* ---- actions ---- */
+
+.topic-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.topic-action {
+  min-height: 34px;
+  padding: 5px 12px;
+  border: 1px solid rgba(84, 96, 88, 0.26);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.55);
+  color: #3f463f;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.topic-action.is-plain {
+  border-style: dashed;
+  color: #79837b;
+}
+
+.topic-decided {
+  font-size: 11px;
+  color: #6c7a70;
+}
+
+/* ---- settings ---- */
+
+.topic-token-form input {
+  width: 100%;
+  min-height: 38px;
+  padding: 7px 10px;
+  border: 1px solid var(--line, #dcded6);
+  border-radius: 12px;
+  font: inherit;
+}
+
+.topic-token-status {
+  margin: 7px 0 0;
+  font-size: 11.5px;
+  color: #79837b;
+}
+
+/* ---- mobile ---- */
+
+@media (max-width: 420px) {
+  .topic-actions {
+    gap: 6px;
+  }
+
+  .topic-action,
+  .topic-chip {
+    min-height: 38px;
+    flex: 1 1 auto;
+  }
+
+  .topic-decided {
+    flex: 1 1 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .topic-chip {
+    transition: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .topic-box {
+    border-color: #4a544c;
+  }
+
+  mark.topic-hit {
+    background: rgba(150, 178, 152, 0.7);
+  }
+}
+
+</style></head><body><main class="shell">
+<h1>候选箱 · 主题建议</h1>
+<p class="lede">主题路由第一阶段的前端。建议是只读投影，永远不会自动应用。</p>
+<p class="intro"><b>设计预览 · 全部为合成数据</b><br>
+主题为 Alpha / Beta / 搬家，与任何真实主题无关。此页由真实渲染函数对着真实后端输出生成，
+样式取自 <code>topic-routing.css</code> 原文。页面不连接任何接口，按钮不会发出请求。</p>
+<section class="demo">
+  <header><h2>单主题</h2><p>精确命中一个主题，给出建议但不应用</p></header>
+  <label class="item"><input type="checkbox"><span>
+    <h3>Alpha 的里程碑</h3>
+    <span class="item-meta">合成候选 · 仅用于设计预览</span>
+    <p>今天把 Alpha 的里程碑和排期都定了。</p>
+    <div class="topic-box is-suggestion" data-state="single">
+      <span class="topic-badge">系统建议 · 尚未应用</span>
+      <span class="topic-state">建议 1 个主题</span>
+      <p class="topic-note">系统建议，尚未应用。你可以接受、改选或不选。</p>
+      <p class="topic-primary">建议主题：<strong>项目 Alpha</strong></p>
+      <ul class="topic-reasons"><li><span class="topic-reason-name">项目 Alpha</span>正文中出现了主题名或精确词「Alpha」</li><li><span class="topic-reason-name">项目 Beta</span>正文只出现了辅助词，需要结合其他证据判断</li></ul>
+      <p class="topic-excerpt"><mark class="topic-hit">Alpha</mark> 的<mark class="topic-hit">里程碑</mark>
+今天把 <mark class="topic-hit">Alpha</mark> 的<mark class="topic-hit">里程碑</mark>和<mark class="topic-hit">排期</mark>都定了。</p>
+      <div class="topic-chips" role="group" aria-label="选择主题"><button type="button" class="topic-chip"
+             data-topic-pick="t_alpha"
+             data-candidate="candidate_2f9f7f749845"
+             aria-pressed="false">项目 Alpha</button><button type="button" class="topic-chip"
+             data-topic-pick="t_beta"
+             data-candidate="candidate_2f9f7f749845"
+             aria-pressed="false">项目 Beta</button><button type="button" class="topic-chip"
+             data-topic-pick="t_gamma"
+             data-candidate="candidate_2f9f7f749845"
+             aria-pressed="false">搬家</button></div>
+      <div class="topic-actions">
+      <button type="button" class="topic-action" data-topic-accept="candidate_2f9f7f749845">接受建议</button>
+      <button type="button" class="topic-action" data-topic-submit="candidate_2f9f7f749845">提交所选</button>
+      <button type="button" class="topic-action is-plain" data-topic-none="candidate_2f9f7f749845">不选主题</button>
+      <span class="topic-decided" aria-live="polite"></span>
+    </div>
+    </div>
+  </span></label>
+</section>
+<section class="demo">
+  <header><h2>多主题</h2><p>两个主题都被精确命中，不折叠成一个</p></header>
+  <label class="item"><input type="checkbox"><span>
+    <h3>Alpha 与 Beta 对齐 0</h3>
+    <span class="item-meta">合成候选 · 仅用于设计预览</span>
+    <p>把 Alpha 和 Beta 的排期对齐一下（第0轮）。</p>
+    <div class="topic-box is-suggestion" data-state="multi">
+      <span class="topic-badge">系统建议 · 尚未应用</span>
+      <span class="topic-state">命中多个主题</span>
+      <p class="topic-note">多个主题都被明确命中，可以同时选择。</p>
+
+      <ul class="topic-reasons"><li><span class="topic-reason-name">项目 Alpha</span>正文中出现了主题名或精确词「Alpha」</li><li><span class="topic-reason-name">项目 Beta</span>正文中出现了主题名或精确词「Beta」</li></ul>
+      <p class="topic-excerpt"><mark class="topic-hit">Alpha</mark> 与 <mark class="topic-hit">Beta</mark> 对齐 0
+把 <mark class="topic-hit">Alpha</mark> 和 <mark class="topic-hit">Beta</mark> 的<mark class="topic-hit">排期</mark>对齐一下（第0轮）。</p>
+      <div class="topic-chips" role="group" aria-label="选择主题"><button type="button" class="topic-chip"
+             data-topic-pick="t_alpha"
+             data-candidate="candidate_746f39061703"
+             aria-pressed="false">项目 Alpha</button><button type="button" class="topic-chip"
+             data-topic-pick="t_beta"
+             data-candidate="candidate_746f39061703"
+             aria-pressed="false">项目 Beta</button><button type="button" class="topic-chip"
+             data-topic-pick="t_gamma"
+             data-candidate="candidate_746f39061703"
+             aria-pressed="false">搬家</button></div>
+      <div class="topic-actions">
+      <button type="button" class="topic-action" data-topic-accept="candidate_746f39061703">接受建议</button>
+      <button type="button" class="topic-action" data-topic-submit="candidate_746f39061703">提交所选</button>
+      <button type="button" class="topic-action is-plain" data-topic-none="candidate_746f39061703">不选主题</button>
+      <span class="topic-decided" aria-live="polite"></span>
+    </div>
+    </div>
+  </span></label>
+</section>
+<section class="demo">
+  <header><h2>歧义</h2><p>只有辅助词，系统明确拒绝归类</p></header>
+  <label class="item"><input type="checkbox"><span>
+    <h3>这周排期</h3>
+    <span class="item-meta">合成候选 · 仅用于设计预览</span>
+    <p>这周的排期还没定下来。</p>
+    <div class="topic-box is-suggestion" data-state="ambiguous">
+      <span class="topic-badge">系统建议 · 尚未应用</span>
+      <span class="topic-state">证据不明确，未归类</span>
+      <p class="topic-note">证据不足以确定主题，系统不替你选。</p>
+
+      <ul class="topic-reasons"><li><span class="topic-reason-name">项目 Alpha</span>正文只出现了辅助词，需要结合其他证据判断</li><li><span class="topic-reason-name">项目 Beta</span>正文只出现了辅助词，需要结合其他证据判断</li></ul>
+      <p class="topic-excerpt">这周<mark class="topic-hit">排期</mark>
+这周的<mark class="topic-hit">排期</mark>还没定下来。</p>
+      <div class="topic-chips" role="group" aria-label="选择主题"><button type="button" class="topic-chip"
+             data-topic-pick="t_alpha"
+             data-candidate="candidate_6c3c9211ff88"
+             aria-pressed="false">项目 Alpha</button><button type="button" class="topic-chip"
+             data-topic-pick="t_beta"
+             data-candidate="candidate_6c3c9211ff88"
+             aria-pressed="false">项目 Beta</button><button type="button" class="topic-chip"
+             data-topic-pick="t_gamma"
+             data-candidate="candidate_6c3c9211ff88"
+             aria-pressed="false">搬家</button></div>
+      <div class="topic-actions">
+      <button type="button" class="topic-action" data-topic-accept="candidate_6c3c9211ff88">接受建议</button>
+      <button type="button" class="topic-action" data-topic-submit="candidate_6c3c9211ff88">提交所选</button>
+      <button type="button" class="topic-action is-plain" data-topic-none="candidate_6c3c9211ff88">不选主题</button>
+      <span class="topic-decided" aria-live="polite"></span>
+    </div>
+    </div>
+  </span></label>
+</section>
+<section class="demo">
+  <header><h2>未命中</h2><p>没有主题命中，按原流程处理</p></header>
+  <label class="item"><input type="checkbox"><span>
+    <h3>午饭</h3>
+    <span class="item-meta">合成候选 · 仅用于设计预览</span>
+    <p>今天吃了碗面，还行。</p>
+    <div class="topic-box is-suggestion" data-state="no_match">
+      <span class="topic-badge">系统建议 · 尚未应用</span>
+      <span class="topic-state">未匹配到主题</span>
+      <p class="topic-note">没有主题被命中，按原有流程处理即可。</p>
+
+
+
+      <div class="topic-chips" role="group" aria-label="选择主题"><button type="button" class="topic-chip"
+             data-topic-pick="t_alpha"
+             data-candidate="candidate_251c9165698a"
+             aria-pressed="false">项目 Alpha</button><button type="button" class="topic-chip"
+             data-topic-pick="t_beta"
+             data-candidate="candidate_251c9165698a"
+             aria-pressed="false">项目 Beta</button><button type="button" class="topic-chip"
+             data-topic-pick="t_gamma"
+             data-candidate="candidate_251c9165698a"
+             aria-pressed="false">搬家</button></div>
+      <div class="topic-actions">
+
+      <button type="button" class="topic-action" data-topic-submit="candidate_251c9165698a">提交所选</button>
+      <button type="button" class="topic-action is-plain" data-topic-none="candidate_251c9165698a">不选主题</button>
+      <span class="topic-decided" aria-live="polite"></span>
+    </div>
+    </div>
+  </span></label>
+</section>
+<section class="demo">
+  <header><h2>对照组（隐藏组）</h2><p>服务端不返回 router_output，但仍可正常选主题</p></header>
+  <label class="item"><input type="checkbox"><span>
+    <h3>两个项目一起排</h3>
+    <span class="item-meta">合成候选 · 仅用于设计预览</span>
+    <p>Alpha 和 Beta 的排期要放在一起看。</p>
+    <div class="topic-box is-control">
+        <span class="topic-state">未显示建议</span>
+        <p class="topic-note">这条候选属于对照组，请按你自己的判断选择主题。</p>
+        <div class="topic-chips" role="group" aria-label="选择主题"><button type="button" class="topic-chip"
+             data-topic-pick="t_alpha"
+             data-candidate="candidate_a0e86e9d91da"
+             aria-pressed="false">项目 Alpha</button><button type="button" class="topic-chip"
+             data-topic-pick="t_beta"
+             data-candidate="candidate_a0e86e9d91da"
+             aria-pressed="false">项目 Beta</button><button type="button" class="topic-chip"
+             data-topic-pick="t_gamma"
+             data-candidate="candidate_a0e86e9d91da"
+             aria-pressed="false">搬家</button></div>
+        <div class="topic-actions">
+
+      <button type="button" class="topic-action" data-topic-submit="candidate_a0e86e9d91da">提交所选</button>
+      <button type="button" class="topic-action is-plain" data-topic-none="candidate_a0e86e9d91da">不选主题</button>
+      <span class="topic-decided" aria-live="polite"></span>
+    </div>
+      </div>
+  </span></label>
+</section>
+<section class="demo">
+  <header><h2>令牌缺失 / 路由不可用</h2><p>候选箱照常工作，只显示克制的不可用状态</p></header>
+  <label class="item"><input type="checkbox"><span>
+    <h3>任意候选</h3>
+    <span class="item-meta">合成候选 · 仅用于设计预览</span>
+    <p></p>
+    <div class="topic-box is-quiet"><span class="topic-state">主题建议不可用</span><p class="topic-note">主题路由当前不可用，候选箱照常工作。</p></div>
+  </span></label>
+</section>
+<footer>Cairn × Xiaoran · Moraine</footer>
+</main></body></html>

@@ -11,9 +11,20 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from .admission import classify_candidate
+from .candidate_keywords import structured_candidate_keywords
 from .consolidate import consolidate
 from .continuity import DEFAULT_LAYER_BUDGETS, build_layered_context, build_wakeup_preview
 from .memory_tiering import derive_tiering_evidence, infer_text_tiering, suggest_memory_tier
+
+SERVICE_AREAS = {"life", "relations", "action", "self", "interest", "study", "unclassified"}
+LEGACY_SERVICE_AREAS = {"work": "action", "mail": "relations", "game": "interest"}
+KIND_AREA_DEFAULTS = {"project": ("action",), "relationship": ("relations",),
+                      "reflection": ("self",), "preference": ("life",), "event": ("life",)}
+
+
+def _canonical_area(value: object) -> str:
+    area = str(value or "")
+    return LEGACY_SERVICE_AREAS.get(area, area)
 
 
 def utc_now() -> str:
@@ -25,6 +36,28 @@ def _atomic_write(path: Path, value: dict) -> None:
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     os.replace(temporary, path)
+
+
+def _rebuild_area_index(memory: dict, candidates: list[dict]) -> None:
+    by_id = {str(row.get("id")): row for row in candidates}
+    def collect(ids):
+        result = {}
+        for candidate_id in ids:
+            row = by_id.get(str(candidate_id))
+            if not row or row.get("state") == "shredded":
+                continue
+            excluded = {_canonical_area(item.get("area")) for item in row.get("service_area_exclusions") or []}
+            for item in row.get("service_areas") or []:
+                area = _canonical_area(item.get("area"))
+                if area and area not in excluded:
+                    result.setdefault(area, []).append(str(candidate_id))
+        return result
+    by_area = collect(memory.get("source_candidate_ids") or [])
+    memory["service_area_index"] = {"derived": True, "authoritative": False,
+        "is_recall_routing_metadata": True, "not_a_semantic_classification": True,
+        "areas": sorted(by_area), "by_area": by_area,
+        "associated_by_area": collect(memory.get("associated_candidate_ids") or []),
+        "rebuilt_at": utc_now(), "source_rule_version": "areas-v1"}
 
 
 class BetaStore:
@@ -50,6 +83,7 @@ class BetaStore:
             "memories": [],
             "candidates": [],
             "events": [],
+            "memory_usage_echoes": [],
             "rollbacks": [],
             "profile": {"display_name": "", "user_display_name": "用户", "summary": "", "avatar": "", "self_core": []},
             "self_core_records": [],
@@ -72,7 +106,10 @@ class BetaStore:
                 "updated_at": None,
             },
             "settings": {"review_mode": "autonomous", "candidate_retention_enabled": False,
-                         "candidate_retention_hours": 168, "identity_relation_routing": False},
+                         "candidate_retention_hours": 168, "identity_relation_routing": False,
+                         "candidate_experience_mode": "off",
+                         "candidate_batch_times": ["11:55", "23:55"],
+                         "candidate_settlement_time": "23:55", "candidate_stats_days": 6},
         }
 
     def _ensure(self) -> None:
@@ -98,6 +135,7 @@ class BetaStore:
             if not isinstance(payload.get(key), list):
                 raise ValueError(f"{key} must be a list")
         payload.setdefault("rollbacks", [])
+        payload.setdefault("memory_usage_echoes", [])
         payload.setdefault("profile", {"display_name": "", "user_display_name": "用户", "summary": "", "avatar": "", "self_core": []})
         payload.setdefault("self_core_records", [])
         payload.setdefault("user_profile_records", [])
@@ -121,7 +159,8 @@ class BetaStore:
                 or not isinstance(payload["profile_recall_policy"], dict)
                 or not isinstance(payload["profile_growth_candidates"], list)
                 or not isinstance(payload["workbench_queue"], dict)
-                or not isinstance(payload["settings"], dict) or not isinstance(payload["rollbacks"], list)):
+                or not isinstance(payload["settings"], dict) or not isinstance(payload["rollbacks"], list)
+                or not isinstance(payload["memory_usage_echoes"], list)):
             raise ValueError("profile and settings must be objects; relations must be a list")
         legacy_settings = payload["settings"]
         payload["settings"] = {
@@ -130,6 +169,10 @@ class BetaStore:
             "candidate_retention_hours": int(legacy_settings.get("candidate_retention_hours", 168)),
             "identity_relation_routing": bool(legacy_settings.get("identity_relation_routing", False)),
             "retain_identity_memory_copy": bool(legacy_settings.get("retain_identity_memory_copy", False)),
+            "candidate_experience_mode": str(legacy_settings.get("candidate_experience_mode", "off")),
+            "candidate_batch_times": list(legacy_settings.get("candidate_batch_times") or ["11:55", "23:55"]),
+            "candidate_settlement_time": str(legacy_settings.get("candidate_settlement_time", "23:55")),
+            "candidate_stats_days": int(legacy_settings.get("candidate_stats_days", 6)),
             **({"updated_at": legacy_settings["updated_at"]} if legacy_settings.get("updated_at") else {}),
         }
         return payload
@@ -283,6 +326,84 @@ class BetaStore:
             "relations": len(data["relations"]),
         }
 
+    def memory_activity(self) -> dict:
+        """Return current-month activity without turning read-only recall into a write."""
+        data = self.snapshot()
+        shanghai = timezone(timedelta(hours=8))
+        now = datetime.now(shanghai)
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        previous_end = month_start - timedelta(seconds=1)
+        previous_start = previous_end.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        next_month = (month_start.replace(day=28) + timedelta(days=4)).replace(day=1)
+        day_count = (next_month - month_start).days
+
+        def parsed(value: object) -> datetime | None:
+            try:
+                result = datetime.fromisoformat(str(value or "").replace("Z", "+00:00"))
+            except ValueError:
+                return None
+            if result.tzinfo is None:
+                result = result.replace(tzinfo=timezone.utc)
+            return result.astimezone(shanghai)
+
+        samples: dict[str, list[tuple[datetime, int]]] = {"recall": [], "intake": [], "delete": []}
+        for row in data.get("memory_usage_echoes") or []:
+            moment = parsed(row.get("occurred_at") or row.get("created_at"))
+            if moment:
+                samples["recall"].append((moment, 1))
+        for row in data.get("memories") or []:
+            moment = parsed(row.get("created_at"))
+            if moment:
+                samples["intake"].append((moment, 1))
+        for row in data.get("events") or []:
+            event_type = str(row.get("type") or "")
+            if event_type not in {"memory_archived", "candidate_content_shredded"}:
+                continue
+            moment = parsed(row.get("at"))
+            if moment:
+                amount = len(row.get("candidate_ids") or []) if event_type == "candidate_content_shredded" else 1
+                samples["delete"].append((moment, max(1, amount)))
+
+        metrics = {}
+        for key, rows in samples.items():
+            days = [0] * day_count
+            previous_total = 0
+            for moment, amount in rows:
+                if month_start <= moment < next_month:
+                    days[moment.day - 1] += amount
+                elif previous_start <= moment <= previous_end:
+                    previous_total += amount
+            total = sum(days)
+            change = None if previous_total == 0 else round((total - previous_total) / previous_total * 100)
+            metrics[key] = {"total": total, "previous_total": previous_total,
+                            "change_percent": change, "days": days}
+        area_order = ("life", "relations", "action", "self", "interest", "study", "unclassified")
+        area_counts = {key: {"total": 0, "previous_total": 0} for key in area_order}
+        for row in data.get("memories") or []:
+            moment = parsed(row.get("created_at"))
+            if moment is None or not (previous_start <= moment < next_month):
+                continue
+            indexed = ((row.get("service_area_index") or {}).get("areas") or [])
+            explicit = [item.get("area") for item in (row.get("service_areas") or []) if isinstance(item, dict)]
+            areas = {_canonical_area(item) for item in (indexed or explicit) if _canonical_area(item) in area_counts}
+            if not areas:
+                areas = set(KIND_AREA_DEFAULTS.get(str(row.get("kind") or ""), ("unclassified",)))
+            bucket = "total" if month_start <= moment < next_month else "previous_total"
+            for area in areas:
+                area_counts[area][bucket] += 1
+        area_labels = {"life": "生活", "relations": "关系", "action": "行动", "self": "自我",
+                       "interest": "兴趣", "study": "学习", "unclassified": "未分类"}
+        areas = []
+        for key in area_order:
+            current = area_counts[key]["total"]
+            previous = area_counts[key]["previous_total"]
+            areas.append({"key": key, "label": area_labels[key], "total": current,
+                          "previous_total": previous, "delta": current - previous})
+        return {"month": month_start.strftime("%Y-%m"), "day_count": day_count,
+                "start_weekday": month_start.weekday(), "metrics": metrics,
+                "areas": areas, "area_scope": "monthly_intake_by_service_area",
+                "recall_scope": "recorded_usage_echoes", "read_only": True}
+
     def profile(self) -> dict:
         return deepcopy(self.snapshot()["profile"])
 
@@ -294,6 +415,10 @@ class BetaStore:
             "candidate_retention_hours": int(current.get("candidate_retention_hours", 168)),
             "identity_relation_routing": bool(current.get("identity_relation_routing", False)),
             "retain_identity_memory_copy": bool(current.get("retain_identity_memory_copy", False)),
+            "candidate_experience_mode": str(current.get("candidate_experience_mode", "off")),
+            "candidate_batch_times": list(current.get("candidate_batch_times") or ["11:55", "23:55"]),
+            "candidate_settlement_time": str(current.get("candidate_settlement_time", "23:55")),
+            "candidate_stats_days": int(current.get("candidate_stats_days", 6)),
             **({"updated_at": current["updated_at"]} if current.get("updated_at") else {}),
         }
 
@@ -305,6 +430,18 @@ class BetaStore:
         retention_hours = int(value.get("candidate_retention_hours", current.get("candidate_retention_hours", 168)))
         if retention_hours not in {24, 48, 72, 168, 720}:
             raise ValueError("candidate_retention_hours must be 24, 48, 72, 168, or 720")
+        experience_mode = str(value.get("candidate_experience_mode", current.get("candidate_experience_mode", "off")))
+        if experience_mode not in {"off", "preview"}:
+            raise ValueError("candidate_experience_mode must be off or preview")
+        batch_times = sorted({str(item) for item in value.get("candidate_batch_times", current.get("candidate_batch_times", []))})
+        if len(batch_times) != 2 or any(not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", item) for item in batch_times):
+            raise ValueError("candidate_batch_times must contain two distinct HH:MM values")
+        settlement_time = str(value.get("candidate_settlement_time", current.get("candidate_settlement_time", batch_times[-1])))
+        if settlement_time not in batch_times:
+            raise ValueError("candidate_settlement_time must be one of candidate_batch_times")
+        stats_days = int(value.get("candidate_stats_days", current.get("candidate_stats_days", 6)))
+        if stats_days < 1 or stats_days > 14:
+            raise ValueError("candidate_stats_days must be between 1 and 14")
         now = utc_now()
         with self.lock:
             data = self._read()
@@ -314,6 +451,10 @@ class BetaStore:
                 "candidate_retention_hours": retention_hours,
                 "identity_relation_routing": bool(value.get("identity_relation_routing", current.get("identity_relation_routing", False))),
                 "retain_identity_memory_copy": bool(value.get("retain_identity_memory_copy", current.get("retain_identity_memory_copy", False))),
+                "candidate_experience_mode": experience_mode,
+                "candidate_batch_times": batch_times,
+                "candidate_settlement_time": settlement_time,
+                "candidate_stats_days": stats_days,
                 "updated_at": now,
             }
             data["events"].append({"id": uuid.uuid4().hex, "type": "settings_updated", "at": now, "target": "settings"})
@@ -553,7 +694,8 @@ class BetaStore:
             self._save(data)
         return deepcopy(row)
 
-    def layered_context(self, query: str = "", include_history: bool = False, budgets: dict | None = None) -> dict:
+    def layered_context(self, query: str = "", include_history: bool = False, budgets: dict | None = None,
+                        area: str | None = None) -> dict:
         settings = self.continuity_settings()
         requested = dict(budgets or {})
         configured = {**DEFAULT_LAYER_BUDGETS, **dict(settings.get("layer_budgets") or {})}
@@ -569,7 +711,8 @@ class BetaStore:
             effective["user_profile"] = 0
         snapshot = self.snapshot()
         context = build_layered_context(snapshot, query=str(query), include_history=bool(include_history),
-                                        budgets=effective, total_budget=int(settings.get("total_budget", 5000)))
+                                        budgets=effective, total_budget=int(settings.get("total_budget", 5000)),
+                                        area=area)
         profile = snapshot.get("profile") or {}
         context["subjects"] = {
             "agent": str(profile.get("display_name") or "Agent")[:120],
@@ -592,7 +735,39 @@ class BetaStore:
         rows = self.snapshot()["candidates"]
         for row in rows:
             row.setdefault("admission", classify_candidate(row))
+            row["structured_keywords"] = structured_candidate_keywords(row)
         return sorted(rows, key=lambda row: row.get("created_at", ""))
+
+    def set_candidate_areas(self, candidate_id: str, *, add: list[str], remove: list[str],
+                            actor: str, reason: str) -> dict:
+        add = list(dict.fromkeys(_canonical_area(item).strip() for item in add if str(item).strip()))
+        remove = list(dict.fromkeys(_canonical_area(item).strip() for item in remove if str(item).strip()))
+        if not actor or not reason or any(item not in SERVICE_AREAS for item in add + remove):
+            raise ValueError("valid areas, actor, and reason are required")
+        now = utc_now()
+        with self.lock:
+            data = self._read()
+            row = next((item for item in data["candidates"] if item.get("id") == candidate_id), None)
+            if row is None or row.get("state") == "shredded":
+                raise KeyError(candidate_id)
+            areas = {_canonical_area(item.get("area")): {**item, "area": _canonical_area(item.get("area"))} for item in row.get("service_areas") or []}
+            exclusions = {_canonical_area(item.get("area")): {**item, "area": _canonical_area(item.get("area"))} for item in row.get("service_area_exclusions") or []}
+            for area in add:
+                areas[area] = {"area": area, "origin": "manual", "kind_at_time": row.get("kind", "event"),
+                               "assigned_at": now, "assigned_by": actor[:120]}
+                exclusions.pop(area, None)
+            for area in remove:
+                areas.pop(area, None)
+                exclusions[area] = {"area": area, "origin": "manual", "reason": reason[:500],
+                                    "assigned_by": actor[:120], "assigned_at": now}
+            row["service_areas"], row["service_area_exclusions"] = list(areas.values()), list(exclusions.values())
+            for memory in data["memories"]:
+                if candidate_id in (memory.get("source_candidate_ids") or []) + (memory.get("associated_candidate_ids") or []):
+                    _rebuild_area_index(memory, data["candidates"])
+            data["events"].append({"id": uuid.uuid4().hex, "type": "service_areas_updated", "at": now,
+                                   "target": candidate_id, "add": add, "remove": remove, "actor": actor[:120]})
+            self._save(data)
+            return deepcopy(row)
 
     def tiering_suggestions(self) -> list[dict]:
         snapshot = self.snapshot()
@@ -603,11 +778,12 @@ class BetaStore:
             explicit = suggest_memory_tier(row, evidence=derive_tiering_evidence(row, snapshot))
             prose = dict(row.get("tiering") or {})
             if prose.get("suggested_tier") in {"recent", "long_term"}:
-                hits, reasons = prose.get("keyword_hits") or {}, []
-                if hits.get("recent"):
-                    reasons.append("近期词：" + "、".join(hits["recent"]))
-                if hits.get("durable"):
-                    reasons.append("长期词：" + "、".join(hits["durable"]))
+                keyword_hits = prose.get("keyword_hits") or {}
+                reasons = []
+                if keyword_hits.get("recent"):
+                    reasons.append("近期词：" + "、".join(keyword_hits["recent"]))
+                if keyword_hits.get("durable"):
+                    reasons.append("长期词：" + "、".join(keyword_hits["durable"]))
                 if (prose.get("semantic") or {}).get("vote"):
                     reasons.append("本地语义邻居支持")
                 output.append({"candidate_id": row["id"], **explicit,
@@ -623,6 +799,85 @@ class BetaStore:
     def list_events(self, limit: int = 200) -> list[dict]:
         rows = self.snapshot()["events"]
         return sorted(rows, key=lambda row: row.get("at", ""), reverse=True)[: max(1, min(int(limit), 1000))]
+
+    def add_memory_usage_echo(self, value: dict) -> dict:
+        """Append evidence about how recalled memories affected a later action.
+
+        Echoes are intentionally separate from memory content and importance. They
+        may inform a future ranking policy, but this first contract only preserves
+        auditable evidence and never rewrites or automatically demotes a memory.
+        """
+        allowed_effects = {"helped", "used", "unused", "misleading", "outdated"}
+        memory_ids = list(dict.fromkeys(
+            str(item).strip() for item in list(value.get("memory_ids") or [])[:20] if str(item).strip()
+        ))
+        effect = str(value.get("effect") or "").strip()
+        action = str(value.get("action") or "").strip()
+        result = str(value.get("result") or "").strip()
+        actor = str(value.get("actor") or "agent").strip()[:120] or "agent"
+        if not memory_ids or effect not in allowed_effects or not action:
+            raise ValueError("memory_ids, action, and a valid effect are required")
+        now = utc_now()
+        with self.lock:
+            data = self._read()
+            existing_ids = {str(row.get("id")) for row in data["memories"]}
+            if any(memory_id not in existing_ids for memory_id in memory_ids):
+                raise KeyError("memory_not_found")
+            row = {
+                "id": f"echo_{uuid.uuid4().hex[:16]}",
+                "memory_ids": memory_ids,
+                "effect": effect,
+                "action": action[:1000],
+                "result": result[:1000],
+                "note": str(value.get("note") or "").strip()[:1000],
+                "actor": actor,
+                "retrieval_id": str(value.get("retrieval_id") or "").strip()[:160] or None,
+                "occurred_at": str(value.get("occurred_at") or now)[:80],
+                "created_at": now,
+                "affects_importance": False,
+                "affects_ranking": False,
+            }
+            data["memory_usage_echoes"].append(row)
+            data["events"].append({"id": uuid.uuid4().hex, "type": "memory_usage_echo_added",
+                                   "at": now, "target": row["id"], "memory_ids": memory_ids,
+                                   "effect": effect, "actor": actor})
+            self._save(data)
+            return deepcopy(row)
+
+    def list_memory_usage_echoes(self, memory_id: str | None = None, limit: int = 100) -> list[dict]:
+        rows = self.snapshot()["memory_usage_echoes"]
+        if memory_id:
+            rows = [row for row in rows if str(memory_id) in (row.get("memory_ids") or [])]
+        rows = sorted(rows, key=lambda row: row.get("occurred_at") or row.get("created_at") or "", reverse=True)
+        return deepcopy(rows[: max(1, min(int(limit), 500))])
+
+    def memory_usage_echo_summary(self, memory_id: str) -> dict:
+        rows = self.list_memory_usage_echoes(memory_id, 500)
+        counts = {key: 0 for key in ("helped", "used", "unused", "misleading", "outdated")}
+        for row in rows:
+            if row.get("effect") in counts:
+                counts[row["effect"]] += 1
+        changed = counts["helped"] + counts["used"]
+        return {
+            "memory_id": memory_id,
+            "total": len(rows),
+            "changed_action_count": changed,
+            "counts": counts,
+            "latest_at": (rows[0].get("occurred_at") or rows[0].get("created_at")) if rows else None,
+            "items": rows,
+            "affects_importance": False,
+            "affects_ranking": False,
+        }
+
+    def recent_memory_usage_echoes(self, limit: int = 3) -> list[dict]:
+        memories = {str(row.get("id")): row for row in self.list_memories("all")}
+        result = []
+        for row in self.list_memory_usage_echoes(limit=max(1, min(int(limit), 20))):
+            result.append({**row, "memories": [
+                {"id": memory_id, "title": (memories.get(memory_id) or {}).get("title", memory_id)}
+                for memory_id in row.get("memory_ids") or []
+            ]})
+        return result
 
     def calendar(self) -> list[dict]:
         counts: dict[str, int] = {}
@@ -648,13 +903,13 @@ class BetaStore:
         scored.sort(key=lambda item: (item[0], item[1]), reverse=True)
         return [{**deepcopy(row), "score": score / max(1, len(words) * 3), "search_mode": "keyword"} for score, _, row in scored[: max(1, min(int(limit), 100))]]
 
-    def _candidate_row(self, value: dict, now: str | None = None, *, semantic_neighbors: list[dict] | None = None,
-                       semantic_mode: str = "unavailable") -> dict:
+    def add_candidate(self, value: dict, *, semantic_neighbors: list[dict] | None = None,
+                      semantic_mode: str = "unavailable") -> dict:
         title = str(value.get("title", "")).strip()
         content = str(value.get("content", "")).strip()
         if not title or not content:
             raise ValueError("title and content are required")
-        now = now or utc_now()
+        now = utc_now()
         row = {
             "id": str(value.get("id") or f"candidate_{uuid.uuid4().hex[:12]}"),
             "title": title[:200],
@@ -665,20 +920,30 @@ class BetaStore:
             "created_at": now,
             "state": "pending",
             "basket": str(value.get("basket") or "unassigned")[:120],
-            "episode_id": str(value.get("episode_id") or "")[:160],
             "requested_importance": max(0.0, min(1.0, float(value.get("requested_importance", value.get("importance", 0.5))))),
         }
-        row["admission"] = classify_candidate(row)
+        requested_areas = value.get("service_areas")
+        origin = "manual" if requested_areas is not None else "kind_default"
+        requested_areas = requested_areas if requested_areas is not None else KIND_AREA_DEFAULTS.get(row["kind"], ("unclassified",))
+        names = list(dict.fromkeys(_canonical_area(item).strip() for item in requested_areas if str(item).strip()))
+        if any(name not in SERVICE_AREAS for name in names):
+            raise ValueError("invalid service area")
+        row["service_areas"] = [{"area": name, "origin": origin, "kind_at_time": row["kind"],
+                                  "assigned_at": now} for name in names]
+        row["service_area_exclusions"] = []
+        for field in ("object_keys", "action_keys"):
+            if value.get(field) is not None:
+                if not isinstance(value[field], list):
+                    raise ValueError(f"{field} must be a list")
+                row[field] = list(dict.fromkeys(
+                    str(item).strip()[:120] for item in value[field] if str(item).strip()
+                ))[:20]
         if value.get("expires_at"):
             row["expires_at"] = str(value["expires_at"])
-        row["tiering"] = infer_text_tiering(row, semantic_neighbors=semantic_neighbors, semantic_mode=semantic_mode)
+        row["admission"] = classify_candidate(row)
+        row["tiering"] = infer_text_tiering(row, semantic_neighbors=semantic_neighbors,
+                                             semantic_mode=semantic_mode)
         row["tiering"]["persisted"] = True
-        return row
-
-    def add_candidate(self, value: dict, *, semantic_neighbors: list[dict] | None = None,
-                      semantic_mode: str = "unavailable") -> dict:
-        row = self._candidate_row(value, semantic_neighbors=semantic_neighbors, semantic_mode=semantic_mode)
-        now = row["created_at"]
         with self.lock:
             data = self._read()
             if any(item.get("id") == row["id"] for item in data["candidates"]):
@@ -687,36 +952,6 @@ class BetaStore:
             data["events"].append({"id": uuid.uuid4().hex, "type": "candidate_added", "at": now, "target": row["id"]})
             self._save(data)
         return row
-
-    def add_candidates(self, values: list[dict], episode_id: str = "") -> list[dict]:
-        if not isinstance(values, list) or not values:
-            raise ValueError("candidates is required")
-        if len(values) > 20:
-            raise ValueError("at most 20 candidates may be added at once")
-        shared_episode = str(episode_id or "").strip()[:160]
-        inputs = []
-        for value in values:
-            if not isinstance(value, dict):
-                raise ValueError("every candidate must be an object")
-            candidate = dict(value)
-            if shared_episode:
-                candidate["episode_id"] = shared_episode
-            inputs.append(candidate)
-        now = utc_now()
-        rows = [self._candidate_row(candidate, now) for candidate in inputs]
-        ids = [row["id"] for row in rows]
-        if len(ids) != len(set(ids)):
-            raise ValueError("candidate ids in a batch must be unique")
-        with self.lock:
-            data = self._read()
-            existing_ids = {item.get("id") for item in data["candidates"]}
-            if any(candidate_id in existing_ids for candidate_id in ids):
-                raise ValueError("candidate id already exists")
-            data["candidates"].extend(rows)
-            data["events"].append({"id": uuid.uuid4().hex, "type": "candidate_batch_added", "at": now,
-                                   "targets": ids, "episode_id": shared_episode})
-            self._save(data)
-        return deepcopy(rows)
 
     def consolidation_preview(self, candidate_ids: list[str], relations: dict | None = None) -> dict:
         ids = {str(value) for value in candidate_ids}
@@ -797,10 +1032,12 @@ class BetaStore:
                 safe = all(not item.get("protected") and not item.get("blockers")
                            and item.get("confidence") == "high" for item in automatic)
                 if safe and tiers == {"long_term"}:
-                    memory_tier, automatic_tier = "long_term", True
+                    memory_tier = "long_term"
+                    automatic_tier = True
                 elif safe and tiers == {"recent"} and all(row.get("expires_at") for row in selected):
-                    memory_tier, automatic_tier = "recent", True
+                    memory_tier = "recent"
                     expires_at = min(str(row["expires_at"]) for row in selected)
+                    automatic_tier = True
             ordered = sorted(selected, key=lambda row: row.get("occurred_at") or row.get("created_at") or "")
             candidate_snapshots = deepcopy(ordered)
             draft = self.consolidation_preview([row["id"] for row in ordered], relations)
@@ -837,6 +1074,7 @@ class BetaStore:
                     row["state"] = "associated" if draft["relations"][row["id"]] == "related_only" else "admitted"
                     row["memory_id"] = memory["id"]
                     row["decided_at"] = now
+            _rebuild_area_index(memory, data["candidates"])
             candidate_after = deepcopy([row for row in data["candidates"] if row.get("id") in ids])
             rollback_id = f"rollback_{uuid.uuid4().hex[:16]}"
             available_until = (datetime.now(timezone.utc) + timedelta(hours=48)).isoformat(timespec="seconds").replace("+00:00", "Z")
@@ -1096,6 +1334,8 @@ class BetaStore:
                 row.update(keep, state="shredded", original_state=original_state, shredded_at=now)
                 shredded.append(row["id"])
             if shredded:
+                for memory in data["memories"]:
+                    _rebuild_area_index(memory, data["candidates"])
                 data["events"].append({"id": uuid.uuid4().hex, "type": "candidate_content_shredded", "at": now,
                                        "target": "candidates", "candidate_ids": shredded})
                 self._save(data)
@@ -1172,10 +1412,10 @@ class BetaStore:
         if int(payload.get("schema", 0)) != self.SCHEMA:
             raise ValueError("unsupported import schema")
         clean = self._empty()
-        for key in ("memories", "candidates", "events", "self_core_records", "user_profile_records",
+        for key in ("memories", "candidates", "events", "memory_usage_echoes", "self_core_records", "user_profile_records",
                     "profile_growth_candidates", "relations", "rollbacks"):
             value = payload.get(key)
-            if value is None and key in {"self_core_records", "user_profile_records", "profile_growth_candidates",
+            if value is None and key in {"memory_usage_echoes", "self_core_records", "user_profile_records", "profile_growth_candidates",
                                          "relations", "rollbacks"}:
                 value = []
             if not isinstance(value, list):

@@ -1,0 +1,13 @@
+/* Public beta release boundary. Private Dwell rooms never enter the visible tree. */
+[data-release-disabled] { display: none !important; }
+
+.release-note {
+  margin: 0 0 20px;
+  padding: 12px 14px;
+  border: 1px solid rgba(113, 143, 164, .18);
+  border-radius: 16px;
+  color: #52616d;
+  background: rgba(255, 255, 255, .72);
+  font-size: 13px;
+  line-height: 1.55;
+}

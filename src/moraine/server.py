@@ -27,8 +27,11 @@ class FastEmbedder:
         return f"fastembed:{self.model_name}"
 
     def passages(self, texts: list[str], batch_size: int) -> list[np.ndarray]:
-        # Avoid a fresh multiprocessing worker for every small Add batch.
-        # AMLAdapter already serializes access to the shared ONNX session.
+        # `parallel=1` asks fastembed to create a multiprocessing worker. On
+        # long AML runs that repeatedly embeds small Add batches, those workers
+        # can overlap, exhaust the service cgroup and leave later Search calls
+        # waiting behind the model lock. Reuse the already-loaded in-process
+        # ONNX session instead; request concurrency is serialized by AMLAdapter.
         return list(self.model.passage_embed(texts, batch_size=batch_size, parallel=None))
 
     def query(self, text: str) -> np.ndarray:

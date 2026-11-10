@@ -2,7 +2,7 @@
 
 > The sanitized standalone beta is available in-tree. See the [standalone beta guide](docs/beta-standalone.md); it uses synthetic examples and relative data paths, never our private production instance.
 
-Current prerelease: `v0.3.0-beta.12`. Chinese first-time testers can follow the [ten-minute first-run guide](docs/first-run.zh-CN.md). Existing installations should use the [upgrade guide](docs/upgrade.zh-CN.md).
+Current prerelease: `v0.3.0-beta.14`. Chinese first-time testers can follow the [ten-minute first-run guide](docs/first-run.zh-CN.md); existing installations can use the [safe upgrade guide](docs/upgrade.zh-CN.md).
 
 <p align="center">
   <img src="assets/moraine-stone.png" width="220" alt="Moraine stone mark with layered mineral veins">
@@ -38,6 +38,7 @@ Moraine provides a safe wakeup preview, not a scheduler, rotation loop, message 
 Our real deployment has been used with hundreds of private memories and currently includes:
 
 - event baskets and admission filtering before long-term storage;
+- private, deterministic topic evidence plus review-only same-event comparison where keywords are a gate rather than an automatic merge score;
 - a candidate inbox for pending, protected, and deferred material;
 - local vector retrieval combined with exact keyword search;
 - reviewable consolidation for duplicates, additions, stage changes, conflicts, and related-only items;
@@ -98,13 +99,15 @@ cp .env.example .env
 scripts/run-beta.sh
 ```
 
-Then check the service:
+Open `http://127.0.0.1:4790/` for the new `dwell-release` workbench. The old
+frontend remains available at `/dwell-v2/` as a rollback path. Then check the
+service:
 
 ```bash
 curl http://127.0.0.1:4790/api/health
 ```
 
-See [`docs/integration.md`](docs/integration.md) for data shapes, APIs, security boundaries, and systemd setup; [`docs/governance.md`](docs/governance.md) for strength rules; and [`docs/memory-layers.md`](docs/memory-layers.md) for candidate and temporal contracts.
+See [`docs/integration.md`](docs/integration.md) for data shapes, APIs, security boundaries, and systemd setup; [`docs/governance.md`](docs/governance.md) for strength rules; and [`docs/memory-layers.md`](docs/memory-layers.md) for candidate and temporal contracts. Agent operators can start with the [Chinese Agent handbook](docs/agent-handbook.zh-CN.md); release maintainers can use the [backend contract](docs/dwell-release-backend-contract.md) and [Dwell v2-to-release comparison](docs/dwell-v2-to-release.zh-CN.md).
 
 ## Data and privacy
 

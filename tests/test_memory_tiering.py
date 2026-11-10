@@ -42,16 +42,18 @@ class MemoryTieringTests(unittest.TestCase):
     def test_text_keywords_and_semantics_reinforce_durable_layer(self):
         result = infer_text_tiering(
             {"title": "项目更新", "content": "已经完成并发布新的检索入口", "kind": "event"},
-            semantic_neighbors=[{"id": "m1", "memory_tier": "long_term", "score": 0.88}], semantic_mode="semantic")
+            semantic_neighbors=[{"id": "m1", "memory_tier": "long_term", "score": 0.88}],
+            semantic_mode="semantic",
+        )
         self.assertEqual(result["suggested_tier"], "long_term")
         self.assertEqual(result["confidence"], "high")
         self.assertEqual(result["semantic"]["vote"], "long_term")
 
     def test_protected_or_hypothetical_text_never_auto_layers(self):
-        result = infer_text_tiering({"title": "关系", "content": "如果我们以后结婚", "kind": "event"})
-        self.assertEqual(result["suggested_tier"], "uncertain")
-        self.assertTrue(result["protected"])
-        self.assertIn("hypothetical_or_conditional", result["blockers"])
+        protected = infer_text_tiering({"title": "关系", "content": "如果我们以后结婚", "kind": "event"})
+        self.assertEqual(protected["suggested_tier"], "uncertain")
+        self.assertTrue(protected["protected"])
+        self.assertIn("hypothetical_or_conditional", protected["blockers"])
 
     def test_other_person_preference_is_not_user_profile_evidence(self):
         result = infer_text_tiering({"title": "转述", "content": "我朋友喜欢绿色", "kind": "event"})

@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 DEFAULT_LAYER_BUDGETS = {"self_core": 800, "user_profile": 900, "relations": 800, "recent": 1100, "long_term": 1600, "history": 800}
 LEGACY_ITEM_ESTIMATE = 300
 MAX_LEGACY_RECENT_ITEMS = 12
+LEGACY_SERVICE_AREAS = {"work": "action", "mail": "relations", "game": "interest"}
 
 
 def _terms(value: str) -> set[str]:
@@ -36,6 +37,40 @@ def _expired(row: Mapping) -> bool:
         return True
 
 
+def _area_rows(snapshot: Mapping, area: str | None) -> tuple[list[dict], list[str]]:
+    memories = list(snapshot.get("memories", []))
+    if not area:
+        return [dict(row) for row in memories], []
+    requested_area = area
+    area = LEGACY_SERVICE_AREAS.get(area, area)
+    candidates = {str(row.get("id")): row for row in snapshot.get("candidates", [])}
+    projected, visible = [], set()
+    for memory in memories:
+        index = dict(memory.get("service_area_index") or {})
+        by_area = index.get("by_area") or {}
+        ids = list(by_area.get(area) or [])
+        if not ids:
+            ids = list(by_area.get(requested_area) or [])
+        if area == "unclassified" and not index.get("areas"):
+            row = dict(memory)
+            row.update({"matched_area": area, "recall_reason": "service_area:unclassified"})
+            projected.append(row)
+            visible.add(str(memory.get("id")))
+            continue
+        for candidate_id in ids:
+            candidate = candidates.get(str(candidate_id))
+            if not candidate or candidate.get("state") == "shredded":
+                continue
+            row = dict(memory)
+            row.update({"title": candidate.get("title", memory.get("title")),
+                        "content": candidate.get("content", ""), "source_ids": [str(candidate_id)],
+                        "parent_memory_id": str(memory.get("id")),
+                        "matched_area": area, "recall_reason": f"service_area:{area}"})
+            projected.append(row)
+            visible.add(str(memory.get("id")))
+    return projected, [str(row.get("id")) for row in memories if str(row.get("id")) not in visible]
+
+
 def _fit(rows: Iterable[Mapping], budget: int, *, layer: str, text_keys: tuple[str, ...]) -> dict:
     items, used, skipped_ids = [], 0, []
     for raw in rows:
@@ -57,7 +92,8 @@ def _fit(rows: Iterable[Mapping], budget: int, *, layer: str, text_keys: tuple[s
 
 
 def build_layered_context(snapshot: Mapping, *, query: str = "", include_history: bool = False,
-                          budgets: Mapping[str, int] | None = None, total_budget: int = 5000) -> dict:
+                          budgets: Mapping[str, int] | None = None, total_budget: int = 5000,
+                          area: str | None = None) -> dict:
     """Build a bounded, source-linked context projection without changing the store."""
     limits = {**DEFAULT_LAYER_BUDGETS, **dict(budgets or {})}
     if any(int(value) < 0 or int(value) > 20000 for value in limits.values()):
@@ -68,10 +104,16 @@ def build_layered_context(snapshot: Mapping, *, query: str = "", include_history
     core = [row for row in snapshot.get("self_core_records", []) if row.get("state", "active") == "active"]
     user_profile = [row for row in snapshot.get("user_profile_records", []) if row.get("state", "active") == "active"]
     relations = [row for row in snapshot.get("relations", []) if row.get("state", "active") == "active" and _matches(query, row)]
-    active = [row for row in snapshot.get("memories", []) if row.get("state", "active") == "active"
+    area_memories, area_skipped_ids = _area_rows(snapshot, str(area).strip() if area else None)
+    active = [row for row in area_memories if row.get("state", "active") == "active"
               and not _expired(row) and _matches(query, row)]
+    if area:
+        unique = {}
+        for row in active:
+            unique.setdefault(str(row.get("parent_memory_id") or row.get("id")), row)
+        active = list(unique.values())
     active.sort(key=lambda row: str(row.get("occurred_at") or row.get("updated_at") or ""), reverse=True)
-    historical = [row for row in snapshot.get("memories", []) if row.get("state") in {"archived", "superseded"} and _matches(query, row)]
+    historical = [row for row in area_memories if row.get("state") in {"archived", "superseded"} and _matches(query, row)]
     historical.sort(key=lambda row: str(row.get("updated_at") or row.get("occurred_at") or ""), reverse=True)
     explicit_recent = [row for row in active if row.get("memory_tier") == "recent"]
     explicit_long_term = [row for row in active if row.get("memory_tier") == "long_term"]
@@ -93,7 +135,8 @@ def build_layered_context(snapshot: Mapping, *, query: str = "", include_history
         layer = _fit(historical, min(int(limits["history"]), history_reserve + remaining),
                      layer="history", text_keys=("title", "content"))
         layers.append(layer)
-    return {"query": query, "layers": layers, "used_chars": sum(layer["used"] for layer in layers),
+    return {"query": query, "area": area, "area_skipped_count": len(area_skipped_ids),
+            "area_skipped_ids": area_skipped_ids, "layers": layers, "used_chars": sum(layer["used"] for layer in layers),
             "total_budget": total_budget, "persisted": False, "recall_is_evidence_not_fact": True}
 
 

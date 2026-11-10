@@ -285,9 +285,9 @@ function render() {
               return `<label class="item">
                 <input type="checkbox" value="${esc(row.id)}">
                 <span><button type="button" class="row-action" data-ignore="${esc(row.id)}">忽略</button>
-                  <h3>${esc(row.title)}</h3>
+                  <h3 data-candidate-title="${esc(row.id)}">${esc(row.title)}</h3>
                   <span class="item-meta">${date(row.occurred_at)} · ${esc(row.kind || "event")}${tier ? ` · ${esc(tierLabels[tier.suggested_tier])}` : ""}</span>
-                  <p>${esc(row.content)}</p>${admissionHint}${tierHint}
+                  <p data-candidate-content="${esc(row.id)}">${esc(row.content)}</p>${admissionHint}${tierHint}
                   <select class="relation-select" data-relation="${esc(row.id)}">
                     <option value="supplement">补充：汇入同一事件</option><option value="duplicate">重复：压缩硬重复</option>
                     <option value="evolution">更迭：发展线与当前状态</option><option value="conflict">冲突：并存为未决冲突</option>
@@ -299,6 +299,7 @@ function render() {
             .join("")}</section>`,
       )
       .join("") || '<p class="muted">候选箱是空的。</p>';
+  mountTopicSuggestions(pending);
   $("#rollback-list").innerHTML = state.rollbacks.length
     ? state.rollbacks
         .map(
@@ -1072,3 +1073,185 @@ activateView(
 bootstrap();
 if ("serviceWorker" in navigator && location.protocol !== "file:")
   navigator.serviceWorker.register("./service-worker.js").catch(() => {});
+
+/* ---------- topic routing shadow suggestions ---------- */
+
+const topicUI = () => globalThis.moraineTopicRouting;
+
+function installTopicTokenControl() {
+  const routing = topicUI();
+  const settings = $("#settings");
+  if (!routing || !settings || $("#topic-token-form")) return;
+  const anchorCard = $("#adviser-form")?.closest("article") || settings.lastElementChild;
+  anchorCard.insertAdjacentHTML(
+    "beforebegin",
+    `<article class="card">
+      <div class="card-head">
+        <div><p class="eyebrow">PRIVATE TOPIC CAPABILITY</p><h2>私有主题令牌</h2></div>
+        <span id="topic-token-state" class="muted"></span>
+      </div>
+      <p class="muted">主题路由使用第二枚能力令牌。它只保存在当前标签页会话中，不回显、不写入记忆库、不进入导出；关闭标签页即消失。</p>
+      <form id="topic-token-form" class="topic-token-form">
+        <label for="topic-token-input">能力令牌</label>
+        <input id="topic-token-input" type="password" autocomplete="off"
+               placeholder="粘贴 MORAINE_PRIVATE_TOPIC_TOKEN">
+        <div class="topic-actions">
+          <button class="topic-action" type="submit">启用主题建议</button>
+          <button class="topic-action is-plain" type="button" id="topic-token-clear">清除</button>
+        </div>
+      </form>
+      <p id="topic-token-status" class="topic-token-status"></p>
+    </article>`,
+  );
+
+  const input = $("#topic-token-input");
+  const status = $("#topic-token-status");
+  const setStatus = (text) => { status.textContent = text; };
+
+  $("#topic-token-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const value = input.value.trim();
+    input.value = "";               // never echo the token back into the DOM
+    if (!value) return setStatus("没有输入令牌。");
+    try {
+      globalThis.sessionStorage.setItem(routing.TOKEN_KEY, value);
+    } catch (error) {
+      return setStatus("当前浏览器不允许会话存储，无法启用。");
+    }
+    await refreshTopicRouting();
+    setStatus(
+      routing.view.status === "ready"
+        ? `已启用，载入 ${routing.view.topics.length} 个主题。`
+        : "令牌无效或主题路由未启用。",
+    );
+  });
+
+  $("#topic-token-clear").addEventListener("click", async () => {
+    try { globalThis.sessionStorage.removeItem(routing.TOKEN_KEY); } catch (error) {}
+    routing.view.status = "idle";
+    routing.view.topics = [];
+    routing.view.entries.clear();
+    routing.view.selections.clear();
+    setStatus("已清除。候选箱不受影响。");
+    render();
+  });
+}
+
+async function refreshTopicRouting() {
+  const routing = topicUI();
+  if (!routing) return;
+  if (!routing.readToken()) { routing.view.status = "idle"; return; }
+  try {
+    await routing.loadTopics();
+    routing.view.status = "ready";
+  } catch (error) {
+    routing.view.status = error.code === "forbidden" ? "forbidden" : "unavailable";
+  }
+}
+
+function mountTopicSuggestions(pending) {
+  const routing = topicUI();
+  if (!routing) return;
+  const state = $("#topic-token-state");
+  if (state)
+    state.textContent = { ready: "已启用", forbidden: "令牌无效", unavailable: "不可用", idle: "未启用" }[
+      routing.view.status
+    ] || "";
+  if (routing.view.status !== "ready") return;
+
+  globalThis.moraineCandidateLookup = (candidateId) => state.candidates.find((row) => row.id === candidateId);
+  const loads = [];
+  for (const row of pending) {
+    const host = document
+      .querySelector(`#candidate-list input[value="${CSS.escape(row.id)}"]`)
+      ?.closest("label.item")
+      ?.querySelector("span");
+    if (!host || host.querySelector(".topic-box")) continue;
+    const mount = document.createElement("div");
+    mount.dataset.topicMount = row.id;
+    host.appendChild(mount);
+    loads.push(routing
+      .loadSuggestion(row.id)
+      .then((entry) => {
+        routing.decorateCandidate(row.id, row, entry);
+        mount.innerHTML = routing.renderSuggestion(row.id, routing.routedText(row));
+      })
+      .catch(() => {
+        routing.view.status = "unavailable";
+        mount.innerHTML = routing.renderSuggestion(row.id, routing.routedText(row));
+      }));
+  }
+  Promise.allSettled(loads).then(async () => {
+    try {
+      await routing.loadEventMatches();
+      for (const row of pending) repaintTopicMount(row.id, routing.routedText(row));
+    } catch (_) {
+      /* Event comparison is advisory; candidate review remains available. */
+    }
+  });
+}
+
+function repaintTopicMount(candidateId, content) {
+  const routing = topicUI();
+  const candidate = state.candidates.find((row) => row.id === candidateId);
+  routing.decorateCandidate(candidateId, candidate, routing.view.entries.get(candidateId));
+  const mount = document.querySelector(`[data-topic-mount="${CSS.escape(candidateId)}"]`);
+  if (mount) mount.innerHTML = routing.renderSuggestion(candidateId, content);
+}
+
+document.addEventListener("click", async (event) => {
+  const routing = topicUI();
+  if (!routing) return;
+  const target = event.target;
+  const pick = target.closest?.("[data-topic-pick]");
+  const accept = target.closest?.("[data-topic-accept]");
+  const submit = target.closest?.("[data-topic-submit]");
+  const none = target.closest?.("[data-topic-none]");
+  const candidateId =
+    pick?.dataset.candidate ||
+    accept?.dataset.topicAccept ||
+    submit?.dataset.topicSubmit ||
+    none?.dataset.topicNone;
+  if (!candidateId) return;
+  const candidate = state.candidates.find((row) => row.id === candidateId);
+  const content = routing.routedText(candidate);
+
+  if (pick) {
+    const current = new Set(routing.view.selections.get(candidateId) || []);
+    const topicId = pick.dataset.topicPick;
+    current.has(topicId) ? current.delete(topicId) : current.add(topicId);
+    routing.view.selections.set(candidateId, [...current]);
+    return repaintTopicMount(candidateId, content);
+  }
+
+  if (accept) {
+    const entry = routing.view.entries.get(candidateId);
+    if (!routing.isVisible(entry)) return;
+    const result = routing.classify(entry.router_output);
+    const suggested = result.primary
+      ? [result.primary]
+      : result.state === "multi"
+        ? result.topics.map((topic) => topic.topic_id)
+        : [];
+    routing.view.selections.set(candidateId, suggested);
+    return repaintTopicMount(candidateId, content);
+  }
+
+  const chosen = none ? [] : routing.view.selections.get(candidateId) || [];
+  try {
+    const entry = await routing.privateRequest("/api/private/topic-routing/choice", {
+      method: "POST",
+      body: JSON.stringify({ candidate_id: candidateId, topic_ids: chosen }),
+    });
+    if (!routing.isVisible(entry)) delete entry.router_output;
+    routing.view.entries.set(candidateId, entry);
+    routing.view.selections.set(candidateId, entry.final_topic_ids || []);
+    repaintTopicMount(candidateId, content);
+    notice("主题选择已记入影子评测日志");
+  } catch (error) {
+    notice("主题选择未能记录，候选箱不受影响");
+  }
+});
+
+installTopicTokenControl();
+refreshTopicRouting().then(() => { if (topicUI()?.view.status === "ready") render(); });

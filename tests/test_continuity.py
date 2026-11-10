@@ -80,6 +80,32 @@ class ContinuityTests(unittest.TestCase):
         self.assertFalse(result["enabled"])
         self.assertEqual(result["reason"], "wakeup_disabled")
 
+    def test_area_filters_segments_before_query_matching(self):
+        self.snapshot["candidates"] = [
+            {"id": "cw", "title": "发布", "content": "部署关键词链路", "state": "admitted"},
+            {"id": "cl", "title": "晚饭", "content": "一起吃面", "state": "admitted"},
+        ]
+        self.snapshot["memories"] = [{"id": "mx", "title": "整合", "content": "部署关键词链路；一起吃面",
+            "state": "active", "occurred_at": "2026-09-25", "service_area_index": {
+                "areas": ["action", "life"], "by_area": {"action": ["cw"], "life": ["cl"]}}}]
+        result = build_layered_context(self.snapshot, query="部署", area="life")
+        self.assertNotIn("一起吃面", str(result["layers"]))
+
+    def test_area_returns_at_most_one_matching_segment_per_memory(self):
+        self.snapshot["candidates"] = [
+            {"id": "c1", "title": "一", "content": "共同验收一", "state": "admitted"},
+            {"id": "c2", "title": "二", "content": "共同验收二", "state": "admitted"},
+        ]
+        self.snapshot["memories"] = [{"id": "mx", "title": "整合", "content": "全文", "state": "active",
+            "occurred_at": "2026-09-25", "service_area_index": {"areas": ["action"], "by_area": {"action": ["c1", "c2"]}}}]
+        result = build_layered_context(self.snapshot, query="验收", area="action")
+        items = sum((layer["items"] for layer in result["layers"]), [])
+        self.assertEqual(len([item for item in items if item["id"] == "mx"]), 1)
+
+    def test_unclassified_keeps_legacy_memory_reachable(self):
+        result = build_layered_context(self.snapshot, query="共同", area="unclassified")
+        self.assertIn("近期验收", str(result["layers"]))
+
     def test_explicit_tiers_override_legacy_recency_and_expired_recent_is_excluded(self):
         self.snapshot["memories"] = [
             {"id": "recent-1", "title": "近期", "content": "临时状态", "state": "active",

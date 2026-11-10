@@ -15,16 +15,11 @@ def admission_signals(candidate: dict) -> list[str]:
     text = f"{candidate.get('title', '')}\n{candidate.get('content', '')}"
     kind = str(candidate.get("kind") or "").casefold()
     signals: list[str] = []
-    if DECISION_OR_RESULT.search(text):
-        signals.append("decision_or_result")
-    if FUTURE_BEHAVIOR.search(text):
-        signals.append("future_behavior")
-    if kind in DURABLE_KINDS or re.search(r"身份|关系|偏好|边界|长期项目|长期原则", text):
-        signals.append("stable_domain")
-    if LATER_CONFIRMATION.search(text):
-        signals.append("later_confirmation")
-    if kind == "relationship" and RELATIONSHIP_COMMITMENT.search(text):
-        signals.append("relationship_commitment")
+    if DECISION_OR_RESULT.search(text): signals.append("decision_or_result")
+    if FUTURE_BEHAVIOR.search(text): signals.append("future_behavior")
+    if kind in DURABLE_KINDS or re.search(r"身份|关系|偏好|边界|长期项目|长期原则", text): signals.append("stable_domain")
+    if LATER_CONFIRMATION.search(text): signals.append("later_confirmation")
+    if kind == "relationship" and RELATIONSHIP_COMMITMENT.search(text): signals.append("relationship_commitment")
     try:
         if float(candidate.get("requested_importance", candidate.get("importance", 0))) >= 0.7:
             signals.append("author_salience")
@@ -39,15 +34,10 @@ def classify_candidate(candidate: dict) -> dict:
     protected = kind in PROTECTED_KINDS
     eligible = len(signals) >= 2
     if protected:
-        status = "protected_review_ready" if eligible else "protected_review"
-        lane = "protected"
+        status, lane = ("protected_review_ready" if eligible else "protected_review"), "protected"
     else:
-        status = "ready_for_review" if eligible else "held_low_signal"
-        lane = "actionable" if eligible else "held_low_signal"
+        status, lane = ("ready_for_review", "actionable") if eligible else ("held_low_signal", "held_low_signal")
     strength = 0.75 if len(signals) >= 4 else 0.6 if len(signals) == 3 else 0.4 if eligible else None
-    return {
-        "version": 1, "signals": signals, "signal_count": len(signals),
-        "eligible": eligible, "protected": protected, "status": status,
-        "review_lane": lane, "suggested_importance": strength,
-        "automatic_persistence": False,
-    }
+    return {"version": 1, "signals": signals, "signal_count": len(signals), "eligible": eligible,
+            "protected": protected, "status": status, "review_lane": lane,
+            "suggested_importance": strength, "automatic_persistence": False}

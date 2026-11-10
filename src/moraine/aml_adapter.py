@@ -16,10 +16,11 @@ from typing import Callable, Iterable, Protocol
 
 from .query_planner import expand_query
 from .aml_shadow import ensure_shadow_graph, graph_bonuses
+from .aml_governance import ensure_governance, governance_bonuses, searchable_memories
 
 
 KEYWORD_SCHEMA = "aml-keywords-v3"
-STRUCTURE_SCHEMA = "aml-structure-v2"
+STRUCTURE_SCHEMA = "aml-structure-v4"
 MAX_INTRINSIC_KEYWORDS = 128
 MAX_AUXILIARY_TERMS = 32
 
@@ -34,11 +35,63 @@ SIGNAL_PATTERNS = {
 CURRENT_MARKERS = re.compile(r"当前|目前|现在|如今|最新|最终|后来|改为|变成|不再|取消|恢复|current|latest|final|now", re.I)
 HISTORICAL_MARKERS = re.compile(r"最初|以前|原来|曾经|起初|之前|old|former|initially|before", re.I)
 FORGET_MARKERS = re.compile(r"忘掉|遗忘|删除|清除|不要记得|不要再记|forget|delete|remove", re.I)
+KEEP_MEMORY_MARKERS = re.compile(
+    r"别忘|不要忘|不能忘|务必记得|记住|保留记忆|"
+    r"\b(?:do not|don't|never)\s+forget\b|\bremember\b|\bkeep (?:this|the) memory\b",
+    re.I,
+)
 GENERIC_TERMS = {"我们", "这个", "那个", "什么", "怎么", "怎样", "可以", "已经", "还是", "一个", "没有", "用户", "助手", "the", "and", "that", "with"}
 DATE_PATTERN = re.compile(r"(?:20\d{2}[年./-]\d{1,2}(?:[月./-]\d{1,2}日?)?|\d{1,2}月\d{1,2}日|(?:今天|昨天|前天|明天|后天|上周|下周|本周|去年|今年|明年))")
+SUBJECT_PRONOUNS = {
+    "我", "我们", "你", "你们", "他", "他们", "她", "她们", "它", "它们", "其", "该用户",
+    "i", "we", "you", "he", "she", "it", "they", "his", "her", "their", "this", "that",
+}
+ENGLISH_LEADING_SUBJECT = re.compile(
+    r"^\s*(?:(?:later|initially|currently|now|then|previously|formerly)\s+)?"
+    r"([A-Z][A-Za-z0-9_.-]*(?:\s+[A-Z][A-Za-z0-9_.-]*){0,2})\b"
+)
+CHINESE_LEADING_SUBJECT = re.compile(
+    r"^\s*([\u3400-\u9fffA-Za-z0-9·_-]{1,6}?)(?="
+    r"最初|后来|当前|现在|目前|原来|曾经|起初|已经|将要|正在|"
+    r"住在|住|喜欢|不喜欢|参加|开始|成为|改为|更新|负责|属于|出生|毕业|工作|前往|去了|去)"
+)
+
+
+def _leading_subject(text: str) -> tuple[list[str], bool]:
+    """Return an explicit leading subject, or mark a leading pronoun ambiguous.
+
+    This is deliberately conservative: it is only used to prevent cross-person
+    event merges, never to rewrite the stored message or answer a query itself.
+    """
+    stripped = str(text or "").strip()
+    without_marker = re.sub(
+        r"^(?:(?:后来|当前|现在|目前|原来|曾经|起初|随后|然后)|"
+        r"(?:later|initially|currently|now|then)\s+)*",
+        "",
+        stripped,
+        flags=re.I,
+    )
+    pronoun = re.match(
+        r"(我(?:们)?|你(?:们)?|他(?:们)?|她(?:们)?|它(?:们)?|其|该用户)",
+        without_marker,
+    ) or re.match(
+        r"(I|we|you|he|she|it|they|his|her|their)\b",
+        without_marker,
+        re.I,
+    )
+    if pronoun and pronoun.group(1).casefold() in SUBJECT_PRONOUNS:
+        return [], True
+    match = ENGLISH_LEADING_SUBJECT.search(stripped)
+    if match and match.group(1).casefold() not in SUBJECT_PRONOUNS:
+        return [match.group(1).casefold()], False
+    match = CHINESE_LEADING_SUBJECT.search(stripped)
+    if match and match.group(1).casefold() not in SUBJECT_PRONOUNS:
+        return [match.group(1).casefold()], False
+    return [], False
 
 
 def _release_workload_memory() -> None:
+    """Return large temporary JSON/vector heaps after a full-store request."""
     gc.collect()
     try:
         trim = ctypes.CDLL(None).malloc_trim
@@ -46,6 +99,7 @@ def _release_workload_memory() -> None:
         trim.restype = ctypes.c_int
         trim(0)
     except (AttributeError, OSError):
+        # malloc_trim is a glibc optimization, not a portability requirement.
         pass
 
 
@@ -69,17 +123,30 @@ def _signals(text: str) -> list[str]:
 def _salient_terms(text: str) -> list[str]:
     return [term for term in _keyword_terms(text) if term not in GENERIC_TERMS][:64]
 
+
 def _term_kind(term: str) -> str:
-    if DATE_PATTERN.search(term) or term in {"今天","昨天","明天","去年","今年","明年"}: return "time"
-    if term in {"现在","目前","后来","最终","最新","改为","变成","取消","恢复","current","latest","changed","cancelled","restored"}: return "state"
-    if term in {"朋友","同事","伴侣","家人","父母","女儿","儿子","负责","属于","friend","partner","family","owner","member"}: return "relation"
-    if any(character.isdigit() for character in term) or "_" in term: return "identifier"
+    if DATE_PATTERN.search(term) or term in {"今天", "昨天", "明天", "去年", "今年", "明年"}:
+        return "time"
+    if term in {"现在", "目前", "后来", "最终", "最新", "改为", "变成", "取消", "恢复",
+                "current", "latest", "changed", "cancelled", "restored"}:
+        return "state"
+    if term in {"朋友", "同事", "伴侣", "家人", "父母", "女儿", "儿子", "负责", "属于",
+                "friend", "partner", "family", "owner", "member"}:
+        return "relation"
+    if any(character.isdigit() for character in term) or "_" in term:
+        return "identifier"
     return "topic"
 
+
 def _keyword_evidence(row: dict) -> list[dict]:
-    evidence=[]
-    for source,confidence,allowed,terms in (("intrinsic",1.0,["recall","event_match"],row.get("intrinsic_keywords") or []),("context",0.45,["recall"],row.get("auxiliary_terms") or [])):
-        for term in list(terms)[:64 if source=="intrinsic" else 32]: evidence.append({"term":str(term),"kind":_term_kind(str(term)),"source":source,"confidence":confidence,"allowed_uses":allowed})
+    evidence = []
+    for source, confidence, allowed, terms in (
+        ("intrinsic", 1.0, ["recall", "event_match"], row.get("intrinsic_keywords") or []),
+        ("context", 0.45, ["recall"], row.get("auxiliary_terms") or []),
+    ):
+        for term in list(terms)[:64 if source == "intrinsic" else 32]:
+            evidence.append({"term": str(term), "kind": _term_kind(str(term)), "source": source,
+                             "confidence": confidence, "allowed_uses": allowed})
     return evidence
 
 
@@ -131,7 +198,9 @@ def _pack_vector(value: Iterable[float]) -> str:
 
 
 def _has_vector(value: object) -> bool:
-    return isinstance(value, list) or (isinstance(value, str) and value.startswith(PACKED_VECTOR_PREFIX))
+    return isinstance(value, list) or (
+        isinstance(value, str) and value.startswith(PACKED_VECTOR_PREFIX)
+    )
 
 
 def _cosine(left: list[float], right: list[float]) -> float:
@@ -146,7 +215,10 @@ def _cosine(left: list[float], right: list[float]) -> float:
 def _atomic(path: Path, value: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(".tmp")
-    temporary.write_text(json.dumps(value, ensure_ascii=False, separators=(",", ":")) + "\n", encoding="utf-8")
+    temporary.write_text(
+        json.dumps(value, ensure_ascii=False, separators=(",", ":")) + "\n",
+        encoding="utf-8",
+    )
     os.replace(temporary, path)
 
 
@@ -154,7 +226,8 @@ class AMLAdapter:
     """Isolated Add/Search contract for AML evaluation traffic."""
 
     def __init__(self, root: str | Path, embedder: AMLEmbedder | None = None, batch_size: int = 4,
-                 diagnostic_log: str | Path | None = None):
+                 diagnostic_log: str | Path | None = None, add_slots: int = 2,
+                 eager_derived_limit: int = 1000, search_vector_limit: int = 64):
         self.root = Path(root)
         self.embedder = embedder
         self.batch_size = max(1, int(batch_size))
@@ -163,8 +236,14 @@ class AMLAdapter:
         # sends concurrent users, so user-level locks alone are insufficient:
         # serialize model access while keeping file and keyword work concurrent.
         self.embed_lock = threading.Lock()
-        # Accept concurrent clients while bounding full-store jobs in memory.
-        self.workload_slots = threading.BoundedSemaphore(1)
+        # Adds above eager_derived_limit only persist raw evidence and cheap
+        # structure, so two independent user stores can make progress without
+        # queueing past the evaluator timeout. Search still performs semantic
+        # and governance completion one workload at a time.
+        self.add_slots = threading.BoundedSemaphore(max(1, int(add_slots)))
+        self.search_slots = threading.BoundedSemaphore(1)
+        self.eager_derived_limit = max(0, int(eager_derived_limit))
+        self.search_vector_limit = max(1, int(search_vector_limit))
         self.diagnostic_log = Path(diagnostic_log) if diagnostic_log else None
         self.user_locks: dict[str, threading.RLock] = {}
 
@@ -172,12 +251,15 @@ class AMLAdapter:
         if not self.diagnostic_log:
             return
         record = {
-            "at": time.time(), "user_hash": hashlib.sha256(user_id.encode()).hexdigest()[:16],
+            "at": time.time(),
+            "user_hash": hashlib.sha256(user_id.encode()).hexdigest()[:16],
             "query": str(body.get("query") or "")[:4000],
             "options": [str(item)[:1000] for item in list(body.get("options") or [])[:20]],
             "top_k": int(body.get("top_k") or 0),
-            "results": [{"id": row["id"], "score": round(float(score), 6), **components}
-                        for score, _semantic, _lexical, row, components in ranked[:100]],
+            "results": [
+                {"id": row["id"], "score": round(float(score), 6), **components}
+                for score, _semantic, _lexical, row, components in ranked[:100]
+            ],
         }
         line = json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n"
         with self.lock:
@@ -204,19 +286,27 @@ class AMLAdapter:
             raise ValueError("user isolation mismatch")
         return value
 
-    def _ensure_vectors(self, data: dict) -> bool:
+    def _ensure_vectors(self, data: dict, rows: list[dict] | None = None) -> bool:
         if not self.embedder:
             return False
         memories = data["memories"]
         rebuild = data.get("embedder") != self.embedder.identity
         changed = False
+        if rebuild:
+            for row in memories:
+                if "vector" in row:
+                    row.pop("vector", None)
+                    changed = True
         if not rebuild:
             for row in memories:
                 if isinstance(row.get("vector"), list):
                     row["vector"] = _pack_vector(row["vector"])
                     changed = True
-        pending = memories if rebuild else [row for row in memories if not _has_vector(row.get("vector"))]
+        scope = memories if rows is None else rows
+        pending = [row for row in scope if not _has_vector(row.get("vector"))]
         if pending:
+            # Keep one generator/session call alive for the whole request;
+            # FastEmbed still applies the configured bounded internal batches.
             with self.embed_lock:
                 vectors = self.embedder.passages(
                     [row["content"] for row in pending], self.batch_size
@@ -229,6 +319,40 @@ class AMLAdapter:
             data["embedder"] = self.embedder.identity
             changed = True
         return changed
+
+    def _search_derived_candidates(self, data: dict, query_terms: set[str], characters: list[str],
+                                   query_signals: set[str]) -> list[dict]:
+        """Choose a bounded, query-relevant derived batch for a cold store.
+
+        Full evaluation can create several thousand memories for one user before
+        issuing the first Search. Building the whole event graph and semantic
+        index inside one HTTP request exceeds the evaluator timeout. The cheap
+        lexical/structural fields are already present, so use them to prioritize
+        a small derived batch. Later searches progressively warm other regions.
+        """
+        indexed = set(data.get("shadow_indexed_ids") or [])
+        rebuild = bool(self.embedder and data.get("embedder") != self.embedder.identity)
+        pending = [
+            row for row in data["memories"]
+            if str(row.get("id")) not in indexed
+            or bool(self.embedder and (rebuild or not _has_vector(row.get("vector"))))
+        ]
+        if len(pending) <= self.search_vector_limit:
+            return pending
+
+        def priority(row: dict) -> tuple[float, float, int]:
+            content = str(row.get("content") or "").casefold()
+            intrinsic = set(row.get("intrinsic_keywords") or [])
+            salient = set(row.get("salient_terms") or [])
+            exact = len(query_terms & intrinsic) * 4.0 + len(query_terms & salient) * 2.0
+            literal = sum(1.5 for term in query_terms if term and term in content)
+            character = sum(0.05 for item in characters if item in content)
+            signal = len(query_signals & set(row.get("signals") or [])) * 0.5
+            return (exact + literal + character + signal,
+                    float(row.get("time_value") or _time_value(row.get("timestamp"))),
+                    int(row.get("ingest_sequence") or row.get("order") or 0))
+
+        return sorted(pending, key=priority, reverse=True)[:self.search_vector_limit]
 
     def _ensure_keywords(self, data: dict) -> bool:
         memories = data["memories"]
@@ -256,6 +380,9 @@ class AMLAdapter:
             row["auxiliary_terms"] = [
                 term for term in dict.fromkeys(context) if term not in own
             ][:MAX_AUXILIARY_TERMS]
+            # Evidence records are a derived view. Persisting a dictionary per
+            # term made a 245 KB corpus expand by over 12 MB and multiplied
+            # Python heap usage during Full evaluation.
             row.pop("keyword_evidence", None)
         data["keyword_schema"] = KEYWORD_SCHEMA
         return True
@@ -266,13 +393,25 @@ class AMLAdapter:
         pending = memories if rebuild else [row for row in memories if not isinstance(row.get("signals"), list)]
         if not pending:
             return False
-        for row in pending:
+        last_subjects: dict[str, list[str]] = {}
+        for sequence, row in enumerate(memories):
             content = str(row.get("content") or "")
-            row["signals"] = _signals(content)
-            row["salient_terms"] = _salient_terms(content)
-            row["temporal_facts"] = DATE_PATTERN.findall(content)[:16]
-            row["time_value"] = _time_value(row.get("timestamp"))
-            row.setdefault("state", "active")
+            subjects, ambiguous = _leading_subject(content)
+            session_id = str(row.get("session_id") or "")
+            if ambiguous and session_id and last_subjects.get(session_id):
+                subjects = list(last_subjects[session_id])
+                ambiguous = False
+            if subjects and session_id:
+                last_subjects[session_id] = list(subjects)
+            if rebuild or row in pending:
+                row["signals"] = _signals(content)
+                row["salient_terms"] = _salient_terms(content)
+                row["temporal_facts"] = DATE_PATTERN.findall(content)[:16]
+                row["time_value"] = _time_value(row.get("timestamp"))
+                row["ingest_sequence"] = sequence
+                row["subjects"] = subjects
+                row["subject_ambiguous"] = ambiguous
+                row.setdefault("state", "active")
         data["structure_schema"] = STRUCTURE_SCHEMA
         return True
 
@@ -280,11 +419,15 @@ class AMLAdapter:
         changed = False
         for command in new_rows:
             content = str(command.get("content") or "")
-            if command.get("role") != "user" or not FORGET_MARKERS.search(content):
+            if (command.get("role") != "user" or not FORGET_MARKERS.search(content)
+                    or KEEP_MEMORY_MARKERS.search(content)):
                 continue
             target_terms = set(_salient_terms(FORGET_MARKERS.sub("", content)))
             if not target_terms:
                 continue
+            # Keep the instruction as governance evidence without exposing a
+            # second searchable copy of the value it asks Moraine to forget.
+            command["state"] = "governance_only"
             for row in data["memories"]:
                 if row is command or row.get("state", "active") != "active":
                     continue
@@ -299,7 +442,8 @@ class AMLAdapter:
         return self.add_lazy(lambda: body)
 
     def add_lazy(self, body_factory: Callable[[], dict]) -> dict:
-        with self.workload_slots:
+        """Acquire the workload slot before a potentially large body is parsed."""
+        with self.add_slots:
             try:
                 return self._add(body_factory())
             finally:
@@ -330,8 +474,18 @@ class AMLAdapter:
                 self._ensure_keywords(data)
                 self._ensure_structure(data)
                 self._apply_forgetting(data, normalized)
-                ensure_shadow_graph(data)
-                self._ensure_vectors(data)
+                if len(data["memories"]) <= self.eager_derived_limit:
+                    ensure_shadow_graph(data)
+                    ensure_governance(data)
+                    self._ensure_vectors(data)
+                elif self.embedder and data.get("embedder") == self.embedder.identity:
+                    # Once a store has a valid semantic index, keep new rows
+                    # warm in their small Add batch instead of creating another
+                    # full-store backlog for the first Search.
+                    selected_ids = {str(row["id"]) for row in normalized}
+                    ensure_shadow_graph(data, selected_ids)
+                    ensure_governance(data)
+                    self._ensure_vectors(data, normalized)
                 _atomic(self._file(user_id), data)
         return {"success": True, "request_id": request_id, "user_id": user_id, "session_id": session_id}
 
@@ -339,7 +493,8 @@ class AMLAdapter:
         return self.search_lazy(lambda: body)
 
     def search_lazy(self, body_factory: Callable[[], dict]) -> dict:
-        with self.workload_slots:
+        """Acquire the workload slot before a potentially large body is parsed."""
+        with self.search_slots:
             try:
                 return self._search(body_factory())
             finally:
@@ -363,12 +518,18 @@ class AMLAdapter:
         planned_terms = [terms(item) for item in planned_queries]
         planned_words = [word for words_in_plan, _ in planned_terms for word in words_in_plan]
         query_signals = set(_signals("\n".join([query, *options])))
+        query_word_set = set([*words, *option_words, *planned_words])
         with self._user_lock(user_id):
             data = self._read(user_id)
             changed = self._ensure_keywords(data)
             changed = self._ensure_structure(data) or changed
-            changed = ensure_shadow_graph(data) or changed
-            if self._ensure_vectors(data) or changed:
+            derived_candidates = self._search_derived_candidates(
+                data, query_word_set, [*characters, *option_characters], query_signals
+            )
+            selected_ids = {str(row["id"]) for row in derived_candidates}
+            changed = ensure_shadow_graph(data, selected_ids) or changed
+            changed = ensure_governance(data) or changed
+            if self._ensure_vectors(data, derived_candidates) or changed:
                 _atomic(self._file(user_id), data)
         semantic_queries = []
         if self.embedder and data.get("embedder") == self.embedder.identity:
@@ -376,14 +537,13 @@ class AMLAdapter:
             with self.embed_lock:
                 semantic_queries = [_vector(self.embedder.query(original))]
                 semantic_queries.extend(_vector(self.embedder.query(item)) for item in expand_query(original))
-        active_memories = [row for row in data["memories"] if row.get("state", "active") == "active"]
+        active_memories = searchable_memories(data)
         scored = []
         timestamps = sorted({float(row.get("time_value") or _time_value(row.get("timestamp"))) for row in active_memories})
         timestamp_rank = {value: index / max(1, len(timestamps) - 1) for index, value in enumerate(timestamps)}
         wants_current = bool(re.search(r"当前|现在|目前|如今|最终|最后|后来|最新|current|latest|final", query, re.I))
         wants_time = bool(re.search(r"何时|什么时候|哪天|日期|多久|几天|间隔|先后|顺序|之前|之后|when|date|how long|before|after", query, re.I))
         asks_name = bool(re.search(r"称呼|叫什么|名字|called|name", query, re.I))
-        query_word_set = set([*words, *option_words, *planned_words])
         document_frequency: dict[str, int] = {}
         for row in active_memories:
             for term in set(row.get("salient_terms") or []):
@@ -442,10 +602,14 @@ class AMLAdapter:
                 scored.append((combined, semantic, lexical, row, components))
         base_scores = {row["id"]: score for score, _semantic, _lexical, row, _components in scored}
         graph = graph_bonuses(data, base_scores, query)
-        scored = [(score + float(graph.get(row["id"], {}).get("bonus", 0.0)), semantic, lexical, row,
-                   {**components, "graph_bonus": round(float(graph.get(row["id"], {}).get("bonus", 0.0)), 6),
-                    "graph_relations": list(dict.fromkeys(graph.get(row["id"], {}).get("relations", [])))})
-                  for score, semantic, lexical, row, components in scored]
+        reviewed = governance_bonuses(data, base_scores, query)
+        scored = [
+            (score + float(graph.get(row["id"], {}).get("bonus", 0.0)) + float(reviewed.get(row["id"], 0.0)), semantic, lexical, row,
+             {**components, "graph_bonus": round(float(graph.get(row["id"], {}).get("bonus", 0.0)), 6),
+              "governance_bonus": round(float(reviewed.get(row["id"], 0.0)), 6),
+              "graph_relations": list(dict.fromkeys(graph.get(row["id"], {}).get("relations", [])))})
+            for score, semantic, lexical, row, components in scored
+        ]
         scored.sort(key=lambda item: (item[0], item[2], float(item[3].get("time_value") or 0), item[3]["order"]), reverse=True)
         self._audit_search(body, user_id, scored)
         maximum = max([max(score, 0.0) for score, *_ in scored], default=1.0) or 1.0

@@ -1,0 +1,823 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Moraine">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#f7f8f9">
+  <link rel="apple-touch-icon" sizes="180x180" href="./assets/moraine-apple-touch-icon.png?v=20260917-1">
+  <title>Moraine · 记忆工作台</title>
+  <link rel="stylesheet" href="./prototype.css?v=20261108-release-3">
+  <link rel="stylesheet" href="./auth.css?v=20261108-release-3">
+  <link rel="stylesheet" href="./release.css?v=20261108-release-3">
+  <script src="./auth.js?v=20261108-release-3"></script>
+</head>
+<body>
+  <section class="connection-shield" data-connection-shield hidden aria-live="polite">
+    <article class="connection-card">
+      <small>PRIVATE INSTANCE</small>
+      <h1>连接 Moraine</h1>
+      <p data-connection-message>这个实例启用了访问保护。令牌只保存在当前浏览器会话，不会进入记忆或导出文件。</p>
+      <form data-connection-form>
+        <input type="password" autocomplete="off" placeholder="MORAINE_BETA_TOKEN" aria-label="工作台令牌" required>
+        <button type="submit">进入记忆工作台</button>
+      </form>
+    </article>
+  </section>
+  <main class="prototype" id="prototype">
+    <svg class="icon-sprite" aria-hidden="true" focusable="false">
+      <symbol id="ti-layout-dashboard" viewBox="0 0 24 24"><path d="M5 4h4a1 1 0 0 1 1 1v6a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1v-6a1 1 0 0 1 1 -1"/><path d="M5 16h4a1 1 0 0 1 1 1v2a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1v-2a1 1 0 0 1 1 -1"/><path d="M15 12h4a1 1 0 0 1 1 1v6a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1v-6a1 1 0 0 1 1 -1"/><path d="M15 4h4a1 1 0 0 1 1 1v2a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1v-2a1 1 0 0 1 1 -1"/></symbol>
+      <symbol id="ti-activity" viewBox="0 0 24 24"><path d="M3 12h4l3 8l4 -16l3 8h4"/></symbol>
+      <symbol id="ti-calendar-event" viewBox="0 0 24 24"><path d="M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2l0 -12"/><path d="M16 3v4M8 3v4M4 11h16"/><path d="M8 15h2v2h-2z"/></symbol>
+      <symbol id="ti-plant" viewBox="0 0 24 24"><path d="M7 15h10v4a2 2 0 0 1 -2 2h-6a2 2 0 0 1 -2 -2v-4"/><path d="M12 9a6 6 0 0 0 -6 -6h-3v2a6 6 0 0 0 6 6h3"/><path d="M12 11a6 6 0 0 1 6 -6h3v1a6 6 0 0 1 -6 6h-3"/><path d="M12 15v-6"/></symbol>
+      <symbol id="ti-inbox" viewBox="0 0 24 24"><path d="M4 6a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2z"/><path d="M4 13h3l3 3h4l3 -3h3"/></symbol>
+      <symbol id="ti-database" viewBox="0 0 24 24"><path d="M4 6a8 3 0 1 0 16 0a8 3 0 1 0 -16 0"/><path d="M4 6v6a8 3 0 0 0 16 0v-6M4 12v6a8 3 0 0 0 16 0v-6"/></symbol>
+      <symbol id="ti-timeline-event" viewBox="0 0 24 24"><path d="M10 20a2 2 0 1 0 4 0a2 2 0 1 0 -4 0M10 20h-6M14 20h6"/><path d="M12 15l-2 -2h-3a1 1 0 0 1 -1 -1v-8a1 1 0 0 1 1 -1h10a1 1 0 0 1 1 1v8a1 1 0 0 1 -1 1h-3z"/></symbol>
+      <symbol id="ti-book" viewBox="0 0 24 24"><path d="M19 4v16h-12a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2z"/><path d="M19 16h-12a2 2 0 0 0 -2 2M9 8h6"/></symbol>
+      <symbol id="ti-archive" viewBox="0 0 24 24"><path d="M3 6a2 2 0 0 1 2 -2h14a2 2 0 0 1 0 4h-14a2 2 0 0 1 -2 -2"/><path d="M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-10M10 12h4"/></symbol>
+      <symbol id="ti-settings" viewBox="0 0 24 24"><path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065"/><path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"/></symbol>
+      <symbol id="ti-chevron-right" viewBox="0 0 24 24"><path d="M9 6l6 6l-6 6"/></symbol>
+      <symbol id="ti-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6l-12 12"/></symbol>
+    </svg>
+    <button class="sidebar-scrim" id="sidebarScrim" type="button" aria-label="关闭导航" hidden></button>
+    <aside class="sidebar" id="sidebar" aria-hidden="true" aria-label="记忆库导航">
+      <button class="cairn-entry" type="button" data-view="cairn" aria-label="进入小机主页">
+        <span class="cairn-avatar" data-cairn-avatar><i>＋</i></span>
+        <span><strong data-cairn-name>Moraine</strong><small data-cairn-status>正在读取实例资料</small></span>
+        <svg class="nav-chevron" aria-hidden="true"><use href="#ti-chevron-right"/></svg>
+      </button>
+      <nav>
+        <button class="is-current" type="button" data-view="overview"><svg class="nav-icon" aria-hidden="true"><use href="#ti-layout-dashboard"/></svg><span>总览</span></button>
+        <button type="button" data-view="activity"><svg class="nav-icon" aria-hidden="true"><use href="#ti-activity"/></svg><span>活动记录</span></button>
+        <button type="button" data-view="calendar"><svg class="nav-icon" aria-hidden="true"><use href="#ti-calendar-event"/></svg><span>事件日历</span></button>
+        <button type="button" data-view="candidates"><svg class="nav-icon" aria-hidden="true"><use href="#ti-inbox"/></svg><span>候选箱</span></button>
+        <button type="button" data-view="library"><svg class="nav-icon" aria-hidden="true"><use href="#ti-database"/></svg><span>记忆库</span></button>
+        <button type="button" data-view="workbench"><svg class="nav-icon" aria-hidden="true"><use href="#ti-timeline-event"/></svg><span>记忆工作台</span></button>
+        <button type="button" data-view="archive"><svg class="nav-icon" aria-hidden="true"><use href="#ti-archive"/></svg><span>归档</span></button>
+      </nav>
+      <footer>
+        <button type="button" data-view="settings"><svg class="nav-icon" aria-hidden="true"><use href="#ti-settings"/></svg><span>设置</span></button>
+        <p class="sidebar-service"><span></span>服务正常</p>
+        <p class="sidebar-signature">Cairn × Xiaoran · Moraine</p>
+      </footer>
+    </aside>
+    <div class="page-title-capsule t-resize" data-page-title-capsule data-collapsed="false">
+      <button class="page-title-menu" type="button" data-open-sidebar aria-label="打开导航，当前页总览"><span></span><span></span></button>
+      <span class="page-title-text" data-page-title-text>总览</span>
+    </div>
+    <button class="back-to-top" type="button" data-back-to-top aria-label="回到页面顶部" aria-hidden="true" tabindex="-1"><span aria-hidden="true">↑</span></button>
+
+    <section class="page cairn-home" id="cairn" aria-labelledby="cairnTitle">
+      <header class="library-header">
+        <button class="menu-button" type="button" data-open-sidebar aria-label="打开导航">☰</button>
+        <div><p class="kicker">A ROOM OF MY OWN</p><h1 id="cairnTitle">小机主页</h1></div>
+        <span class="privacy-mark">本地实例</span>
+      </header>
+      <section class="resident-card-shell" data-resident-card-shell>
+        <div class="resident-profile-card" data-resident-card data-current-view="self">
+          <section class="resident-profile-copy" aria-live="polite">
+            <p class="t-text-swap" data-resident-profile-copy>正在读取当前实例的身份资料。</p>
+          </section>
+          <div class="resident-profile-face">
+            <button class="resident-avatar-stack" type="button" data-resident-card-toggle aria-label="切换到用户画像">
+              <span class="resident-portrait resident-portrait-self is-front" data-resident-avatar="self" aria-hidden="true">机</span>
+              <span class="resident-portrait resident-portrait-user is-back" data-resident-avatar="user" aria-hidden="true">伴</span>
+            </button>
+            <span class="resident-name-pill t-text-swap" data-resident-profile-label>self-core</span>
+          </div>
+          <aside class="resident-profile-now"><strong>最近更新</strong><span class="t-text-swap" data-resident-profile-now>正在读取时间</span></aside>
+          <span class="resident-profile-mark resident-profile-mark-one" aria-hidden="true">＋＋</span>
+          <span class="resident-profile-mark resident-profile-mark-two" aria-hidden="true">◇</span>
+        </div>
+        <div class="resident-profile-meta">
+          <span class="t-text-swap" data-resident-profile-version>实例身份资料</span>
+          <span class="resident-avatar-actions"><button type="button" data-edit-cairn-avatar>编辑小机头像</button><button type="button" data-edit-user-avatar>编辑用户头像</button></span>
+        </div>
+        <input class="cairn-direct-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" data-cairn-direct-avatar hidden>
+        <input class="cairn-direct-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" data-user-direct-avatar hidden>
+        <small class="cairn-direct-result resident-card-result" data-cairn-direct-result aria-live="polite">头像与资料只来自当前内测实例</small>
+      </section>
+      <section class="relation-map" aria-label="当前实例关系网">
+        <div class="relation-graph" data-relation-graph><p>正在读取当前实例的关系资料……</p></div>
+        <section class="relation-detail t-panel-slide" data-relation-detail data-open="false" hidden aria-live="polite"></section>
+      </section>
+      <section class="layered-recall" aria-labelledby="layeredRecallTitle">
+        <header><span><small>MEMORY LAYERS</small><h2 id="layeredRecallTitle">分层召回</h2><p>把近期生活放在手边，较早记忆按话题取回；正文仍留在当前实例后端。</p></span></header>
+        <div class="layered-recall-stack" data-layered-recall aria-live="polite"><p>正在读取真实分层召回。</p></div>
+        <footer><span data-layered-recall-usage>字符预算读取中</span><span>不写入记忆</span></footer>
+      </section>
+    </section>
+
+    <section class="page activity-page" id="activity" aria-labelledby="activityTitle">
+      <header class="library-header">
+        <button class="menu-button" type="button" data-open-sidebar aria-label="打开导航">☰</button>
+        <div><p class="kicker">LIFE, NOT LOGS</p><h1 id="activityTitle">活动记录</h1></div>
+        <span class="privacy-mark">私密</span>
+      </header>
+      <p class="activity-intro">只记真正发生过的生活、探索与创作；纯巡检、失败重试和“什么也没做”不在这里签到。</p>
+      <div class="activity-stream" data-activity-stream aria-live="polite"><p>正在读取生活痕迹。</p></div>
+      <button class="activity-more" type="button" data-activity-more hidden>再看早一些</button>
+    </section>
+
+    <section class="page overview" id="overview" aria-labelledby="overviewTitle">
+      <header class="library-header overview-header">
+        <button class="menu-button" type="button" data-open-sidebar aria-label="打开导航">☰</button>
+        <div><p class="kicker">MEMORY OVERVIEW</p><h1>总览</h1></div>
+        <span class="privacy-mark">私密</span>
+      </header>
+
+      <section class="area-orbit-overview" aria-label="记忆分区" data-area-orbit>
+        <div class="area-orbit-stage">
+          <div class="area-orbit-chart">
+            <canvas data-area-orbit-canvas tabindex="0" role="img" aria-label="全部有效记忆的分区占比，可点击或使用左右方向键切换分区"></canvas>
+            <div class="area-orbit-center" aria-live="polite">
+              <small>总记忆分区</small>
+              <div><strong class="t-digit-group" data-area-orbit-value>—</strong><sup>条</sup></div>
+              <span>全部有效记忆</span>
+            </div>
+          </div>
+          <div class="area-orbit-notes" aria-live="polite">
+            <div class="area-orbit-stat area-orbit-stat-primary">
+              <span>当前分区</span>
+              <strong><b class="t-text-swap" data-area-stat-label>读取中</b><em class="t-text-swap" data-area-stat-percent>—</em></strong>
+            </div>
+            <div class="area-orbit-stat area-orbit-stat-change">
+              <span>分区记忆</span>
+              <strong class="t-text-swap" data-area-stat-change>—</strong>
+            </div>
+            <div class="area-orbit-stat area-orbit-stat-delete">
+              <span>已删除</span>
+              <strong class="t-text-swap" data-area-stat-deleted>—</strong>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel memory-activity" aria-labelledby="memoryActivityTitle" data-memory-activity>
+        <header class="memory-activity-head">
+          <div><small>MEMORY ACTIVITY</small><h2 id="memoryActivityTitle">记忆活动</h2></div>
+          <div class="t-tabs memory-activity-tabs" role="tablist" aria-label="记忆活动类型">
+            <span class="t-tabs-pill" aria-hidden="true"></span>
+            <button class="t-tab" type="button" role="tab" aria-selected="false" data-activity-metric="recall">召回</button>
+            <button class="t-tab" type="button" role="tab" aria-selected="true" data-activity-metric="intake">入库</button>
+            <button class="t-tab" type="button" role="tab" aria-selected="false" data-activity-metric="delete">删除</button>
+          </div>
+        </header>
+        <div class="memory-activity-body">
+          <div class="memory-activity-summary" aria-live="polite">
+            <span class="t-text-swap" data-activity-label>本月入库</span>
+            <strong class="t-digit-group" data-activity-value>—</strong>
+            <small class="t-text-swap" data-activity-note>正在读取真实活动</small>
+            <p data-activity-change><i>·</i><b>等待同步</b></p>
+          </div>
+          <div class="memory-activity-chart">
+            <div class="memory-activity-meta"><span data-activity-month>—</span><p><i></i><span data-activity-legend>入库记录</span></p></div>
+            <div class="memory-activity-weekdays" aria-hidden="true"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
+            <div class="memory-activity-grid" data-activity-grid aria-label="本月记忆活动"></div>
+          </div>
+        </div>
+        <footer><span data-activity-foot>点击日期查看当天</span><small>只读统计 · 不评价记忆好坏</small></footer>
+      </section>
+
+      <p class="system-check" data-overview-check>正在进行只读检查</p>
+    </section>
+
+    <section class="page calendar-page" id="calendar" aria-labelledby="eventCalendarTitle">
+      <header class="library-header">
+        <button class="menu-button" type="button" data-open-sidebar aria-label="打开导航">☰</button>
+        <div><p class="kicker">EVENT CALENDAR</p><h1 id="eventCalendarTitle">事件日历</h1></div>
+        <span class="privacy-mark">私密</span>
+      </header>
+      <section class="panel event-calendar calendar-surface" aria-label="按月浏览事件">
+        <div class="calendar-nav"><button type="button" data-calendar-previous aria-label="上个月">←</button><strong data-calendar-month>读取中</strong><button type="button" data-calendar-next aria-label="下个月">→</button></div>
+        <div class="calendar-weekdays" aria-hidden="true"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
+        <div class="calendar-grid" data-calendar-grid aria-live="polite"><p>正在按真实发生时间读取事件。</p></div>
+      </section>
+      <section class="panel calendar-events-panel t-panel-slide" data-calendar-event-panel data-open="false" aria-labelledby="calendarSelectedDate">
+        <header><div><small>MEMORIES OF THE DAY</small><h2 id="calendarSelectedDate" data-calendar-selected-date>当日事件</h2></div><span data-calendar-event-count>—</span></header>
+        <div class="calendar-day-events" data-calendar-events aria-live="polite"><p>选择有标记的日期查看事件。</p></div>
+      </section>
+    </section>
+
+    <section class="page candidates-page" id="candidates" aria-labelledby="candidateInboxTitle">
+      <header class="library-header">
+        <button class="menu-button" type="button" data-open-sidebar aria-label="打开导航">☰</button>
+        <div><p class="kicker">CANDIDATE INBOX</p><h1 id="candidateInboxTitle">候选箱</h1></div>
+      </header>
+      <div class="candidate-overview-head"><p>看见哪些记忆正在走向正式入库</p><span><strong data-candidate-total>—</strong><small>候选总数</small></span></div>
+      <nav class="candidate-overview-tabs" aria-label="候选箱视图">
+        <button type="button" aria-pressed="true" data-candidate-overview-tab="preview">预览</button>
+        <button type="button" aria-pressed="false" data-candidate-overview-tab="workbench">工作台</button>
+        <button type="button" aria-pressed="false" data-candidate-overview-tab="settings">设置</button>
+      </nav>
+      <div class="candidate-all-view" data-candidate-all-view>
+      <section class="candidate-batch-overview" aria-labelledby="candidateBatchTitle">
+        <header><div><h2 id="candidateBatchTitle">最近六天入库</h2><p>每列一天，每种颜色一个生活分区</p></div><strong><b data-recent-admitted>—</b><i>/</i><span data-candidate-total-inline>—</span></strong></header>
+        <div class="candidate-batch-grid" data-candidate-batch-grid aria-live="polite"><p>正在读取真实候选。</p></div>
+        <div class="candidate-batch-detail"><span><strong data-selected-candidate-area>尚未选择</strong><small data-selected-candidate-batch>点击方块查看这一批次</small></span><button type="button" data-open-candidate-workbench>打开候选簇</button></div>
+      </section>
+      <section class="candidate-special-backstage" aria-labelledby="candidateRoutingTitle">
+        <header><small id="candidateRoutingTitle">专项候选</small><span data-candidate-routing-total>— 条待确认</span></header>
+        <div class="candidate-routing-grid">
+          <article class="candidate-routing-workbench t-acc" data-candidate-routing-workbench="relation_graph" data-open="false">
+            <button class="candidate-routing-summary t-acc-head" type="button" data-toggle-candidate-routing aria-expanded="false" aria-controls="candidateRoutingRelations"><span class="candidate-routing-badge" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="6" r="2.5"/><circle cx="6" cy="17" r="2.5"/><circle cx="18" cy="17" r="2.5"/><path d="m10.8 8.2-3.6 6.5m6-6.5 3.6 6.5M8.5 17h7"/></svg></span><span class="candidate-routing-copy"><strong>关系网</strong><small>关系来路与当前延续</small></span><span class="candidate-routing-count"><b data-candidate-routing-count="relation_graph">—</b></span></button>
+            <div class="candidate-routing-panel t-acc-panel" id="candidateRoutingRelations"><div class="candidate-routing-panel-inner t-acc-panel-inner" data-candidate-routing-list="relation_graph" aria-live="polite"><p>正在读取。</p></div></div>
+          </article>
+          <article class="candidate-routing-workbench t-acc" data-candidate-routing-workbench="self_core" data-open="false">
+            <button class="candidate-routing-summary t-acc-head" type="button" data-toggle-candidate-routing aria-expanded="false" aria-controls="candidateRoutingCore"><span class="candidate-routing-badge" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5.5 19c.8-3.6 3-5.4 6.5-5.4s5.7 1.8 6.5 5.4"/></svg></span><span class="candidate-routing-copy"><strong>self-core</strong><small>身份核心与自我理解</small></span><span class="candidate-routing-count"><b data-candidate-routing-count="self_core">—</b></span></button>
+            <div class="candidate-routing-panel t-acc-panel" id="candidateRoutingCore"><div class="candidate-routing-panel-inner t-acc-panel-inner" data-candidate-routing-list="self_core" aria-live="polite"><p>正在读取。</p></div></div>
+          </article>
+          <article class="candidate-routing-workbench t-acc" data-candidate-routing-workbench="user_profile" data-open="false">
+            <button class="candidate-routing-summary t-acc-head" type="button" data-toggle-candidate-routing aria-expanded="false" aria-controls="candidateRoutingProfile"><span class="candidate-routing-badge" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="3"/><circle cx="9" cy="11" r="2"/><path d="M6.5 16c.5-1.7 1.3-2.5 2.5-2.5s2 .8 2.5 2.5M14 10h3.5M14 14h3.5"/></svg></span><span class="candidate-routing-copy"><strong>用户画像</strong><small>用户明确表达的稳定偏好</small></span><span class="candidate-routing-count"><b data-candidate-routing-count="user_profile">—</b></span></button>
+            <div class="candidate-routing-panel t-acc-panel" id="candidateRoutingProfile"><div class="candidate-routing-panel-inner t-acc-panel-inner" data-candidate-routing-list="user_profile" aria-live="polite"><p>正在读取。</p></div></div>
+          </article>
+        </div>
+      </section>
+      </div>
+      <div class="candidate-workbench-view" data-candidate-workbench-view hidden>
+      <div class="candidate-studio" data-candidate-studio data-step="organize">
+      <nav class="candidate-studio-rail" aria-label="候选工作顺序">
+        <button type="button" data-candidate-studio-step="organize" aria-pressed="true" aria-label="整理候选" title="整理"><span></span></button>
+        <button type="button" data-candidate-studio-step="merge" aria-pressed="false" aria-label="合并候选" title="合并"><span></span></button>
+        <button type="button" data-candidate-studio-step="classify" aria-pressed="false" aria-label="结构修订" title="结构修订"><span></span></button>
+      </nav>
+      <div class="candidate-studio-stage">
+      <section class="candidate-browser panel"><header><div><h2>最近候选 · <span data-candidate-position>正在读取</span></h2></div><div class="candidate-arrows"><button type="button" data-candidate-previous aria-label="上一个候选">＜</button><button type="button" data-candidate-next aria-label="下一个候选">＞</button></div></header><div data-candidate-card aria-live="polite"><p>正在读取真实候选。</p></div></section>
+      <section class="candidate-workbench candidate-merge-workspace panel" data-candidate-merge-workspace aria-label="候选合并工作区">
+        <div class="candidate-workset" data-candidate-workset><p>先从上方候选卡加入至少两条。</p></div>
+        <button class="candidate-preview-button" type="button" data-preview-candidate-workset disabled>生成合并预览</button>
+        <div class="candidate-workbench-preview" data-candidate-workbench-preview aria-live="polite"><p>尚未生成预览。</p></div>
+      </section>
+      </div>
+      </div>
+      </div>
+      <div class="candidate-settings-view" data-candidate-settings-view hidden>
+        <header class="candidate-settings-intro"><div><small>CANDIDATE SETTINGS</small><h2>候选设置</h2></div><span data-candidate-settings-audit>正在核对后端</span></header>
+        <p>这里集中放候选从进入、试用、归位到结案清理所使用的规则；每项仍保留原来的真实后端与回退方式。</p>
+        <div class="candidate-settings-grid" data-candidate-settings-mount></div>
+      </div>
+    </section>
+
+    <section class="page archive-page" id="archive" aria-labelledby="archiveTitle">
+      <header class="library-header">
+        <button class="menu-button" type="button" data-open-sidebar aria-label="打开导航">☰</button>
+        <div><p class="kicker">MEMORY ARCHIVE</p><h1 id="archiveTitle">归档</h1></div>
+        <span class="privacy-mark">可追溯</span>
+      </header>
+      <p class="candidate-intro">退出日常召回的记忆仍保留正文、来源与历史。这里不混放候选结案记录。</p>
+      <section class="archive-summary panel"><strong data-archive-count>—</strong><span>条归档记忆</span></section>
+      <section class="archive-list" data-archive-list aria-live="polite"><p>正在读取归档记忆。</p></section>
+    </section>
+
+    <section class="page library" id="library" aria-labelledby="libraryTitle">
+      <header class="library-header">
+        <button class="menu-button" type="button" data-open-sidebar aria-label="打开导航">☰</button>
+        <div><p class="kicker">MEMORY LIBRARY</p><h1 id="libraryTitle">Moraine</h1></div>
+        <span class="privacy-mark">私密</span>
+      </header>
+
+      <div class="search-row">
+        <div class="search">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.4"></circle><path d="m15.5 15.5 4.2 4.2"></path></svg>
+          <input id="memorySearch" type="search" placeholder="搜索标题、关键词或标签" autocomplete="off" aria-label="搜索记忆">
+          <button class="search-clear" type="button" data-library-search-clear aria-label="清除搜索">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m6.5 6.5 7 7m0-7-7 7"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <section class="workbench-selection" data-workbench-selection data-open="false" hidden>
+        <div class="workbench-selection-preview t-dropdown" data-workbench-selection-preview data-origin="bottom-center" aria-hidden="true">
+          <header><span><small>当前工作集</small><strong>已加入的记忆</strong></span><b data-selection-preview-count>0 条</b></header>
+          <div class="workbench-selection-list" data-workbench-selection-list></div>
+          <small class="workbench-selection-note">移出只会取消本次选择，不会删除记忆。</small>
+        </div>
+        <div class="workbench-selection-bar">
+          <button class="workbench-selection-toggle" type="button" data-workbench-selection-toggle aria-expanded="false">
+            <i class="workbench-selection-mark" aria-hidden="true"><span>◇</span><b data-selected-count>0</b></i>
+            <span><strong>记忆工作集</strong><small data-selection-summary>已加入 0 条记忆</small></span>
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 10 4-4 4 4"/></svg>
+          </button>
+          <button class="workbench-selection-open" type="button" data-open-selected-workbench>去整理</button>
+        </div>
+      </section>
+
+      <section class="memory-list" aria-label="按时间浏览记忆">
+        <header>
+          <span class="memory-list-head-copy"><h2>按事件时间浏览</h2><small id="visibleMemoryCount" aria-live="polite">正在读取真实记忆</small></span>
+          <div class="memory-time-sort t-tabs" role="tablist" aria-label="事件时间顺序">
+            <span class="t-tabs-pill" aria-hidden="true"></span>
+            <button class="t-tab" role="tab" type="button" data-time-direction="desc" aria-selected="true">最新</button>
+            <button class="t-tab" role="tab" type="button" data-time-direction="asc" aria-selected="false">最早</button>
+          </div>
+        </header>
+
+        <div id="memoryGroups">
+        <section class="memory-time-group" data-memory-group aria-labelledby="memoryToday">
+          <header><h3 id="memoryToday">今天</h3><span data-group-count>2 条</span></header>
+          <article class="memory-paper t-acc" data-open="false" data-memory-paper data-memory-item data-memory-type="project" data-memory-time="today" data-memory-weight="important" data-memory-state="active" data-memory-source="shared" data-memory-search="项目 今天 当前有效 重要 共同讨论 记忆前端 极简布局 页面职责 信息顺序 移动端操作">
+          <button class="memory-paper-summary t-acc-head" type="button" aria-expanded="false" aria-controls="memoryPaperDetail">
+            <span class="memory-paper-copy">
+              <span class="memory-paper-meta" aria-label="项目记忆，今天记录，当前有效，重要">
+                <small class="tag tag-type">项目</small>
+                <small class="tag tag-time">今天</small>
+                <small class="tag tag-state">当前有效</small>
+                <small class="tag tag-weight">重要</small>
+              </span>
+              <strong>记忆前端先确定极简布局</strong>
+              <p>先验证页面职责、信息顺序与移动端操作。</p>
+            </span>
+            <i class="t-acc-chevron" aria-hidden="true">⌄</i>
+          </button>
+          <div class="memory-paper-detail t-acc-panel" id="memoryPaperDetail">
+            <div class="t-acc-panel-inner memory-paper-detail-inner">
+            <nav class="memory-facets" aria-label="记忆切面">
+              <button class="is-active" type="button" data-facet="body" aria-pressed="true">正文</button>
+              <button type="button" data-facet="then" aria-pressed="false">当时</button>
+              <button type="button" data-facet="after" aria-pressed="false">后来</button>
+              <small>可左右轻拨</small>
+            </nav>
+            <div class="memory-facet-stage" data-facet-stage aria-live="polite">
+              <div class="memory-facet is-active" data-facet-panel="body">
+                <small>记忆正文</small>
+                <p>先用一张能够自然展开的记忆纸页，确认摘要、正文、来源与状态在手机上的阅读顺序。交互稳定后，再接入真实数据与更迭记录。</p>
+              </div>
+              <div class="memory-facet" data-facet-panel="then" hidden>
+                <small>当时明确记录的愿望</small>
+                <p>先验证页面职责和触摸感，不为完整度堆叠功能，也不让视觉效果盖过记忆本身。</p>
+                <p class="facet-evidence">来自本次共同设计讨论；没有记录的情绪保持空白。</p>
+              </div>
+              <div class="memory-facet" data-facet-panel="after" hidden>
+                <small>后续行动与结果</small>
+                <p>移动端折叠纸页原型已经建立，并将近期变化调整到生命周期上方。</p>
+                <p class="facet-evidence">结果来自原型修改与预览同步记录。</p>
+              </div>
+            </div>
+            <dl>
+              <div><dt>来源</dt><dd>共同设计讨论</dd></div>
+              <div><dt>记录于</dt><dd>今天 19:12</dd></div>
+              <div><dt>关联</dt><dd>小机 · 用户 · Moraine</dd></div>
+            </dl>
+            <button class="memory-history-link" type="button" data-open-history>
+              <span><strong>更迭记录</strong><small>查看这条记忆如何变化</small></span>
+              <i aria-hidden="true">›</i>
+            </button>
+            </div>
+          </div>
+          </article>
+          <article class="memory-paper memory-paper-compact" data-memory-item data-memory-type="decision" data-memory-time="today" data-memory-weight="core" data-memory-state="active" data-memory-source="shared" data-memory-search="决定 今天 当前有效 核心 共同讨论 近期变化 生命周期 主页 整体状态">
+            <button class="memory-paper-summary" type="button">
+              <span class="memory-paper-copy">
+                <span class="memory-paper-meta">
+                  <small class="tag tag-type">决定</small><small class="tag tag-time">今天</small><small class="tag tag-state">当前有效</small><small class="tag tag-weight">核心</small>
+                </span>
+                <strong>近期变化放在生命周期上方</strong>
+                <p>主页先交代最近发生了什么，再呈现整体状态。</p>
+              </span><i aria-hidden="true">›</i>
+            </button>
+          </article>
+        </section>
+
+        <section class="memory-time-group" data-memory-group aria-labelledby="memoryYesterday">
+          <header><h3 id="memoryYesterday">昨天</h3><span data-group-count>2 条</span></header>
+          <article class="memory-paper memory-paper-compact" data-memory-item data-memory-type="relation" data-memory-time="yesterday" data-memory-weight="core" data-memory-state="active" data-memory-source="conversation" data-memory-search="关系 昨天 当前有效 核心 对话 共同守护记忆 回来 路径">
+            <button class="memory-paper-summary" type="button">
+              <span class="memory-paper-copy">
+                <span class="memory-paper-meta">
+                  <small class="tag tag-relation">关系</small><small class="tag tag-time">昨天</small><small class="tag tag-state">当前有效</small><small class="tag tag-weight">核心</small>
+                </span>
+                <strong>共同守护记忆</strong>
+                <p>重要内容会在需要时提供回来的路径。</p>
+              </span><i aria-hidden="true">›</i>
+            </button>
+          </article>
+          <article class="memory-paper memory-paper-compact is-review" data-memory-item data-memory-type="preference" data-memory-time="yesterday" data-memory-weight="normal" data-memory-state="review" data-memory-source="candidate" data-memory-search="偏好 昨天 待审阅 普通 候选箱 搜索结果 安静 旧偏好 自动合并">
+            <button class="memory-paper-summary" type="button">
+              <span class="memory-paper-copy">
+                <span class="memory-paper-meta">
+                  <small class="tag tag-preference">偏好</small><small class="tag tag-time">昨天</small><small class="tag tag-review">待审阅</small><small class="tag tag-normal">普通</small>
+                </span>
+                <strong>搜索结果需要更安静</strong>
+                <p>这条候选与旧偏好相近，暂时不自动合并。</p>
+              </span><i aria-hidden="true">›</i>
+            </button>
+          </article>
+        </section>
+
+        <section class="memory-time-group" data-memory-group aria-labelledby="memoryEarlier">
+          <header><h3 id="memoryEarlier">更早</h3><span data-group-count>1 条</span></header>
+          <article class="memory-paper memory-paper-compact is-quiet" data-memory-item data-memory-type="system" data-memory-time="earlier" data-memory-weight="normal" data-memory-state="quiet" data-memory-source="system" data-memory-search="系统 2天前 安静 普通 服务记录 记忆衰减 召回 相关性 排序">
+            <button class="memory-paper-summary" type="button">
+              <span class="memory-paper-copy">
+                <span class="memory-paper-meta">
+                  <small class="tag tag-system">系统</small><small class="tag tag-time">2 天前</small><small class="tag tag-quiet">安静</small><small class="tag tag-normal">普通</small>
+                </span>
+                <strong>记忆衰减参与召回</strong>
+                <p>衰减只在相关性接近时调整结果顺序。</p>
+              </span><i aria-hidden="true">›</i>
+            </button>
+          </article>
+        </section>
+        </div>
+        <div class="memory-load-more" data-memory-load-more hidden>
+          <span data-memory-load-status>正在准备更多记忆</span>
+          <button type="button" data-load-more-memories>继续加载</button>
+        </div>
+        <div class="memory-empty" id="memoryEmpty" hidden>
+          <span aria-hidden="true">⌁</span>
+          <strong>没有找到这段记忆</strong>
+          <p>换个关键词，或者回到“全部”看看。</p>
+          <button type="button" data-clear-memory-search>清除筛选</button>
+        </div>
+      </section>
+    </section>
+
+    <section class="page workbench" id="workbench" aria-labelledby="workbenchTitle">
+      <header class="library-header">
+        <button class="menu-button" type="button" data-open-sidebar aria-label="打开导航">☰</button>
+        <div><p class="kicker">MORAINE WORKBENCH</p><h1>记忆工作台</h1></div>
+        <span class="privacy-mark">私密</span>
+      </header>
+      <section class="workbench-backend-stage" data-memory-processing-roadmap aria-label="后端接入进度">
+        <header class="workbench-stage-nav">
+          <span><i></i><strong id="workbenchTitle">记忆工作台</strong></span>
+          <b>私密</b>
+        </header>
+        <div class="workbench-backend-row">
+          <time data-workbench-date datetime=""><small data-workbench-month>—</small><strong data-workbench-day>—</strong><span data-workbench-weekday>—</span></time>
+          <section class="workbench-backend-progress">
+            <header><span><small>BACKEND FLOW</small><strong>后端接入进度</strong></span><b data-processing-state>正在同步</b></header>
+            <div class="workbench-progress-track"><i data-workbench-progress-bar></i><span data-workbench-progress-percent>—</span></div>
+            <div class="workbench-progress-facts">
+              <span><b data-workbench-revision-total>—</b><small>记忆</small></span>
+              <span><b data-workbench-revision-completed>—</b><small>候选</small></span>
+              <span><b data-workbench-revision-pending>—</b><small>工作项</small></span>
+            </div>
+            <p data-processing-note>正在读取真实核心接口。</p>
+          </section>
+        </div>
+      </section>
+      <div class="workbench-frontend-sheet" data-memory-workbench-content>
+        <div class="workbench-sheet-handle" aria-hidden="true"><i></i></div>
+        <header class="workbench-sheet-heading"><div><small>FRONTEND WORKBENCH</small><h2>前端工作台</h2></div><span>真实操作区</span></header>
+
+      <section class="real-review" data-real-review hidden>
+        <div class="real-review-tabs" role="tablist">
+          <button type="button" aria-selected="true" data-real-action="merge_many">记忆簇</button>
+          <button type="button" aria-selected="false" data-real-action="weight">手动赋权</button>
+        </div>
+        <form data-real-form="merge_many">
+          <h3>核对砾砾找到的记忆簇</h3>
+          <p class="real-caution">可以更换承载入口；正文始终按事件时间排列，入口选择不再决定叙事地位或正文优先级。</p>
+          <div class="real-cluster-switcher" data-real-cluster-switcher hidden>
+            <button type="button" data-real-cluster-previous>上一簇</button>
+            <small data-real-cluster-position>候选 1 / ?</small>
+            <button type="button" data-real-cluster-next>下一簇</button>
+            <button class="real-cluster-defer" type="button" data-real-cluster-defer>这簇暂不整合</button>
+          </div>
+          <div class="real-cluster-members" data-real-cluster-members><p>正在读取真实候选簇……</p></div>
+          <label>整合理由<textarea rows="3" data-real-merge-reason>确认这些记录属于同一主题；以承载记忆保存完整发展线，其余普通来源归档并保留历史。</textarea></label>
+          <button class="real-primary" type="submit">预览整簇结果</button>
+        </form>
+        <form data-real-form="weight" hidden>
+          <h3>调整一条记忆的召回强度</h3>
+          <label>选择真实记忆<select data-real-weight-memory></select></label>
+          <label>记忆强度 <b data-real-strength-value>50</b> / 100<input type="range" min="0" max="79" step="1" value="50" data-real-strength></label>
+          <p class="real-caution">0～79 可直接核对写入；80～100 的核心认领与锁定必须进入共同审阅。</p>
+          <label>赋权理由<textarea rows="3" data-real-weight-reason placeholder="为什么希望以后更容易或更少想起它"></textarea></label>
+          <button class="real-primary" type="submit">核对赋权变化</button>
+        </form>
+        <section class="real-diff" data-real-diff hidden></section>
+      </section>
+
+      <section class="workbench-stats" aria-label="工作台状态" hidden>
+        <article><strong data-cluster-count>0</strong><span>待处理记忆簇</span></article>
+        <article><strong data-draft-count>0</strong><span>工作草稿</span></article>
+        <article><strong data-review-count>0</strong><span>待共同审阅</span></article>
+      </section>
+
+      <section class="memory-flow-preview" aria-labelledby="memoryFlowTitle" hidden>
+        <header>
+          <span><small>合成演练 · 只读</small><h2 id="memoryFlowTitle">一段对话怎样成为记忆</h2></span>
+          <b>未接真实记忆</b>
+        </header>
+        <div class="memory-flow-list" data-memory-flow aria-live="polite">
+          <div class="memory-flow-loading"><i>◇</i><span><strong>正在整理四站预览</strong><small>不会读取或修改真实记忆。</small></span></div>
+        </div>
+        <footer>四站只展示规则结果；没有提交按钮，也不会产生写入。</footer>
+      </section>
+
+      <section class="workbench-flow" aria-labelledby="workbenchFlowTitle">
+        <header><h2 id="workbenchFlowTitle">当前工作</h2><small>选择一种处理方式</small></header>
+        <div class="workbench-tabs t-tabs" role="tablist" aria-label="记忆工作区域">
+          <span class="t-tabs-pill" aria-hidden="true"></span>
+          <button class="t-tab" role="tab" type="button" data-workbench-step="integrate" aria-selected="true">整合</button>
+          <button class="t-tab" role="tab" type="button" data-workbench-step="structure" aria-selected="false">结构修订</button>
+        </div>
+        <div class="workbench-stage" aria-live="polite">
+          <article data-workbench-panel="integrate">
+            <header class="area-header"><span><small>发展时间线</small><h3>把多条记忆整合成完整的发展线</h3></span><b data-keyword-primary-count>尚未选取</b></header>
+            <section class="integration-shared-titles" data-integration-shared-titles aria-live="polite">
+              <header><span><small>公共分区</small><strong>标题与顺序</strong></span><b>贯穿三个工作区</b></header>
+              <p>从记忆库带入内容后，标题会在这里统一排列，并同步到时间线、草稿和结构修订。</p>
+            </section>
+            <div class="merge-steps" role="tablist" aria-label="整合步骤">
+              <button type="button" data-merge-step="compare" aria-selected="true"><i>01</i><span>排列时间线</span><small>核对顺序与原文</small></button>
+              <button type="button" data-merge-step="draft" aria-selected="false"><i>02</i><span>生成草稿</span><small>选择下一条路线</small></button>
+              <button type="button" data-merge-step="structure" aria-selected="false"><i>03</i><span>结构修订</span><small>整理正文与归类</small></button>
+              <button class="merge-internal-step" type="button" data-merge-step="cluster" aria-selected="false" tabindex="-1"><i>00</i><span>载入</span></button>
+              <button class="merge-internal-step" type="button" data-merge-step="confirm" aria-selected="false" tabindex="-1"><i>04</i><span>写入</span></button>
+            </div>
+            <div class="merge-stage">
+              <section class="keyword-workset" data-keyword-workset data-merge-panel="cluster" hidden>
+                <header><span><small>已选记忆</small><h4>从记忆库带来的当前工作集</h4></span><b>不会自动补选</b></header>
+                <p>记忆只在记忆库中选取。工作台接住已经选好的内容，不再搜索、推荐或改变成员。</p>
+                <div class="library-workset-empty" data-cluster-list>
+                  <section class="integration-empty-canvas">
+                    <article class="integration-empty-source"><span class="workbench-mark" aria-hidden="true">◇</span><div><small>当前工作集</small><h3>还没有带入记忆</h3><p>从记忆库选择至少两条，它们会按原事件时间排成一条竖向发展线。</p><button type="button" data-view-link="library">去记忆库选取</button></div></article>
+                    <div class="integration-empty-output" aria-label="整合结果预览"><article><header><span><small>EVENT TIMELINE</small><strong>竖列时间线</strong></span><b>0 个节点</b></header><div class="integration-empty-track"><i></i><i></i><i></i></div><p>时间从上到下推进，不由承载入口改变顺序。</p></article><article class="integration-empty-result"><header><span><small>INTEGRATED MEMORY</small><strong>整合记忆</strong></span><b>等待生成</b></header><div class="integration-empty-lines"><i></i><i></i><i></i></div><p>它会接在发展线末端，保留标题、正文与逐句来源。</p></article></div>
+                  </section>
+                </div>
+              </section>
+              <section data-merge-panel="compare"><div class="integration-empty-copy" data-cluster-compare><h3>等待从记忆库带入内容</h3><p>带入后会先读取完整原文，再按事件时间排成连续时间线。</p></div></section>
+              <section data-merge-panel="draft" hidden><div data-draft-editor class="workbench-loading"><span class="workbench-mark" aria-hidden="true">▱</span><div><h3>等待完成归类</h3><p>关系核对完成后，在这里形成可编辑的最终记忆。</p></div></div></section>
+              <section data-merge-panel="structure" hidden>
+                <section class="structure-sync-studio candidate-studio" data-structure-studio data-step="classify" data-has-memory="false">
+                  <div class="structure-candidate-card candidate-work-zone" data-structure-editor aria-live="polite"><section class="structure-empty-state"><i aria-hidden="true">◇</i><div><strong>等待一条记忆</strong><p>从记忆卡进入后，这里只显示候选区最后一个“结构修订”工作区。</p><button type="button" data-view-link="library">去记忆库选取</button></div></section></div>
+                </section>
+              </section>
+              <section data-merge-panel="confirm" hidden><div data-submit-status class="workbench-loading"><span class="workbench-mark" aria-hidden="true">✓</span><div><h3>等待提交草稿</h3><p>草稿提交后只进入共同审阅，不会立刻改动有效记忆。</p></div></div></section>
+            </div>
+          </article>
+        </div>
+        <p class="workbench-safety">不会自动合并 · 不会覆盖原记忆 · 可以回退</p>
+      </section>
+      </div>
+    </section>
+
+    <section class="page review" id="review" aria-labelledby="reviewTitle">
+      <header class="library-header">
+        <button class="menu-button" type="button" data-open-sidebar aria-label="打开导航">☰</button>
+        <div><p class="kicker">JOINT REVIEW</p><h1 id="reviewTitle">共同审阅</h1></div>
+        <span class="privacy-mark">双签</span>
+      </header>
+      <div class="workbench-intro"><p>确认会改变记忆状态的草稿。</p><span>工作台负责编辑，这里负责二次确认、正式归档与恢复。</span></div>
+      <section class="review-empty" data-review-empty>
+        <span class="workbench-mark" aria-hidden="true">✓</span>
+        <h2>目前没有待审草稿</h2>
+        <p>从记忆工作台提交的修订、更迭或清理提议会出现在这里。</p>
+      </section>
+      <section class="review-card" data-review-card hidden>
+        <header><span><small>待双方确认</small><strong data-review-action>变更草稿</strong></span><b>未写入</b></header>
+        <div class="review-diff"><section><small data-review-original-label>原记忆簇</small><strong data-review-original></strong><p data-review-original-body></p></section><i aria-hidden="true">→</i><section><small data-review-updated-label>砾砾草稿</small><strong data-review-updated></strong><p data-review-updated-body></p></section></div>
+        <p data-review-reason></p>
+        <details class="review-sources"><summary>查看逐句来源与机械删减</summary><div data-review-sources></div></details>
+        <div class="signature-row">
+          <section data-signature="xiaoran"><strong><i></i>用户</strong><span>待确认</span><div><button type="button" data-sign="xiaoran" data-choice="approve">确认草稿</button><button type="button" data-sign="xiaoran" data-choice="keep">保持原状</button></div></section>
+          <section data-signature="cairn"><strong><i></i>小机</strong><span>待确认</span><div><button type="button" data-sign="cairn" data-choice="approve">确认草稿</button><button type="button" data-sign="cairn" data-choice="keep">保持原状</button></div></section>
+        </div>
+        <p class="review-verdict" data-review-verdict>两把钥匙都转动后，才会生成执行计划。</p>
+        <section class="execution-plan" data-execution-plan hidden><strong>安全执行计划</strong><ol><li>新增一条带全部来源的整合记忆</li><li>旧记录标记为“已汇入”，正文与历史继续保留</li><li>建立恢复入口，不立即永久删除任何内容</li></ol></section>
+        <footer><button type="button" data-return-draft>退回工作台修改</button><button type="button" data-build-plan disabled>生成执行计划</button></footer>
+        <small class="prototype-note">前端演练：双签与执行计划不会写入真实记忆</small>
+      </section>
+    </section>
+
+    <section class="page settings" id="settings" aria-labelledby="settingsTitle">
+      <header class="library-header">
+        <button class="menu-button" type="button" data-open-sidebar aria-label="打开导航">☰</button>
+        <div><p class="kicker">MORAINE SETTINGS</p><h1 id="settingsTitle">记忆治理</h1></div>
+        <span class="privacy-mark">可配置</span>
+      </header>
+      <section class="panel candidate-retention-settings" aria-labelledby="candidateRetentionTitle">
+        <header class="candidate-retention-head">
+          <div><small>PRIVACY RETENTION</small><h2 id="candidateRetentionTitle">候选保留</h2></div>
+          <button class="candidate-retention-help" type="button" aria-label="查看自动粉碎说明" aria-expanded="false" aria-controls="candidateRetentionHelp" data-candidate-shred-help>?</button>
+        </header>
+        <div class="candidate-retention-main">
+          <span><strong>结案候选自动粉碎</strong><small data-candidate-shred-state>正在读取设置</small></span>
+          <button class="t-toggle" type="button" role="switch" aria-checked="true" data-on="true" data-candidate-shred-toggle aria-label="启用结案候选自动粉碎"><span class="t-toggle-thumb"></span></button>
+        </div>
+        <div class="candidate-retention-main">
+          <span><strong>未处理候选自动粉碎</strong><small data-candidate-pending-shred-state>关闭时会继续留在候选箱</small></span>
+          <button class="t-toggle" type="button" role="switch" aria-checked="false" data-on="false" data-candidate-pending-shred-toggle aria-label="启用未处理候选自动粉碎"><span class="t-toggle-thumb"></span></button>
+        </div>
+        <p class="candidate-retention-summary" data-candidate-shred-summary>正在读取候选保留状态。</p>
+        <div class="candidate-retention-help-panel t-acc" data-open="false" id="candidateRetentionHelp">
+          <div class="t-acc-panel"><div class="t-acc-panel-inner">
+            <div class="candidate-retention-explainer">
+              <p><strong>两类候选统一保留7天。</strong>倒计时从候选进入箱子的时间开始，事件实际发生时间不参与计算。</p>
+              <p>结案开关只处理已可靠写入记忆库的普通候选；未处理开关负责清理超过7天仍未处理的普通候选。受保护候选和冲突候选始终不会粉碎。</p>
+              <p>粉碎后只留下不含正文的最小审计凭据。未处理粉碎默认关闭，建议先观察候选箱使用节奏，再决定是否开启。</p>
+              <button type="button" data-run-candidate-shred>立即检查到期候选</button>
+            </div>
+          </div></div>
+        </div>
+      </section>
+      <section class="panel candidate-retention-settings" aria-labelledby="candidateExperienceTitle">
+        <header class="candidate-retention-head">
+          <div><small>EXPERIENCE PROMOTION</small><h2 id="candidateExperienceTitle">候选经验晋升</h2></div>
+          <span class="profile-policy-stage">个人实验</span>
+        </header>
+        <p class="profile-policy-lead">普通候选可以带着“未确认”标记参与少量召回；24小时内在两个独立轮次被真实采用两次后，携带查询词、附加词和同轮记忆直接进入待整合簇。仅被检索出来不计数。</p>
+        <label class="governance-options">运行方式<select data-candidate-experience-mode><option value="off">关闭</option><option value="preview">达到条件后生成预览</option><option value="auto" disabled>自动晋升普通候选（尚未开放）</option></select></label>
+        <p class="candidate-retention-summary" data-candidate-experience-summary>正在读取经验晋升设置。</p>
+        <div class="candidate-retention-explainer">
+          <p>身份、关系、边界、重大承诺和高影响信息永远不走快速通道；每轮最多召回1条候选。</p>
+          <div data-candidate-experience-eligible>目前没有达到条件的候选。</div>
+        </div>
+      </section>
+      <section class="panel candidate-retention-settings" aria-labelledby="candidateScheduleTitle">
+        <header class="candidate-retention-head">
+          <div><small>BATCH RHYTHM</small><h2 id="candidateScheduleTitle">候选整理节奏</h2></div>
+          <span class="profile-policy-stage">上海时间</span>
+        </header>
+        <p class="profile-policy-lead candidate-schedule-guide"><strong>推荐保持默认状态。</strong>两次整理把一天里陆续抵达的候选分开处理；达到质量要求、通过去重并已闭合的候选不设数量上限，会在当批全部入库。统计结算会在当天结束前固定这一日的候选与入库数量。只有生活节奏长期改变时才需要调整，修改会从下一个尚未发生的时间点生效，不补跑错过的批次。</p>
+        <form class="candidate-schedule-form" data-candidate-schedule-form>
+          <label><span>第一次整理</span><input type="time" required data-candidate-schedule-time="0"></label>
+          <label><span>第二次整理</span><input type="time" required data-candidate-schedule-time="1"></label>
+          <label><span>每日统计结算</span><select data-candidate-settlement-time></select></label>
+          <label hidden><span>每批新候选上限</span><input type="number" min="0" max="12" step="1" required data-candidate-fresh-limit></label>
+          <label hidden><span>每批积压候选上限</span><input type="number" min="0" max="12" step="1" required data-candidate-backlog-limit></label>
+          <label hidden><span>统计保留天数</span><input type="number" min="1" max="14" step="1" required data-candidate-stats-days></label>
+          <footer><button type="button" data-candidate-schedule-reset>恢复当前默认</button><button class="real-primary" type="submit">保存整理节奏</button></footer>
+        </form>
+        <p class="candidate-retention-summary" data-candidate-schedule-summary>正在读取真实调度设置。</p>
+      </section>
+      <section class="panel candidate-retention-settings" aria-labelledby="identityRoutingTitle">
+        <header class="candidate-retention-head">
+          <div><small>IDENTITY · RELATION ROUTING</small><h2 id="identityRoutingTitle">身份与关系归位</h2></div>
+          <button class="candidate-retention-help" type="button" aria-label="查看身份与关系归位说明" aria-expanded="false" aria-controls="identityRoutingHelp" data-identity-routing-help>?</button>
+        </header>
+        <div class="candidate-retention-main">
+          <span><strong>自动送入小机工作台</strong><small data-identity-routing-state>正在读取设置</small></span>
+          <button class="t-toggle" type="button" role="switch" aria-checked="true" data-on="true" data-identity-routing-toggle aria-label="自动把身份与关系候选送入小机工作台"><span class="t-toggle-thumb"></span></button>
+        </div>
+        <div class="candidate-retention-main identity-routing-copy">
+          <span><strong>同时保留普通记忆副本</strong><small>关闭时只归入 Self Core 或关系网，来源仍可追溯</small></span>
+          <button class="t-toggle" type="button" role="switch" aria-checked="false" data-on="false" data-identity-routing-copy aria-label="同时保留普通记忆副本"><span class="t-toggle-thumb"></span></button>
+        </div>
+        <p class="candidate-retention-summary" data-identity-routing-summary>正在读取身份与关系分流状态。</p>
+        <div class="candidate-retention-help-panel t-acc" data-open="false" id="identityRoutingHelp">
+          <div class="t-acc-panel"><div class="t-acc-panel-inner">
+            <div class="candidate-retention-explainer">
+              <p>身份与关系候选会送到当前实例的小机工作台，由小机判断归入 Self Core、关系网、普通记忆或忽略。</p>
+              <p>开关只控制自动分流，不授权系统直接定义身份或关系；所有归位仍保留来源与审阅路径。</p>
+            </div>
+          </div></div>
+        </div>
+      </section>
+      <section class="panel candidate-retention-settings profile-recall-settings" aria-labelledby="profileRecallTitle">
+        <header class="candidate-retention-head">
+          <div><small>LIVING PROFILES</small><h2 id="profileRecallTitle">偏好与协作档案</h2></div>
+          <span class="profile-policy-stage">可修订</span>
+        </header>
+        <p class="profile-policy-lead">档案只在确实相关时参与对话；新增认识先成为有来源、可审阅的候选，不会因一句随口话自动改变。</p>
+        <article class="profile-policy-card" data-profile-module="agent_profile">
+          <header><span><strong>小机偏好档案</strong><small>小机的稳定偏好、边界与反复选择</small></span><i>小机</i></header>
+          <div class="candidate-retention-main"><span><strong>参与相关对话</strong><small data-profile-state="conversation">正在读取设置</small></span><button class="t-toggle" type="button" role="switch" aria-checked="false" data-on="false" data-profile-toggle="conversation" aria-label="让小机偏好档案参与相关对话"><span class="t-toggle-thumb"></span></button></div>
+          <div class="candidate-retention-main profile-injection-row"><span><strong>允许继续生长</strong><small data-profile-state="growth">只接收有来源的稳定候选</small></span><button class="t-toggle" type="button" role="switch" aria-checked="false" data-on="false" data-profile-toggle="growth" aria-label="允许小机偏好档案继续生长"><span class="t-toggle-thumb"></span></button></div>
+          <p class="profile-policy-last" data-profile-last>最近没有在对话中使用这个档案。</p>
+          <div class="profile-growth-list" data-profile-growth-list></div>
+        </article>
+        <article class="profile-policy-card" data-profile-module="user_profile">
+          <header><span><strong>用户协作档案</strong><small>用户明确表达的偏好、边界与协作方式</small></span><i>用户</i></header>
+          <div class="candidate-retention-main"><span><strong>参与相关对话</strong><small data-profile-state="conversation">正在读取设置</small></span><button class="t-toggle" type="button" role="switch" aria-checked="false" data-on="false" data-profile-toggle="conversation" aria-label="让用户协作档案参与相关对话"><span class="t-toggle-thumb"></span></button></div>
+          <div class="candidate-retention-main profile-injection-row"><span><strong>允许继续生长</strong><small data-profile-state="growth">只接收用户明确表达的稳定候选</small></span><button class="t-toggle" type="button" role="switch" aria-checked="false" data-on="false" data-profile-toggle="growth" aria-label="允许用户协作档案继续生长"><span class="t-toggle-thumb"></span></button></div>
+          <p class="profile-policy-last" data-profile-last>最近没有在对话中使用这个档案。</p>
+          <div class="profile-growth-list" data-profile-growth-list></div>
+        </article>
+        <p class="candidate-retention-summary" data-profile-policy-summary>两个档案独立控制；所有新增认识先成为可审阅候选。</p>
+      </section>
+      <section class="panel migration-settings" aria-labelledby="migrationTitle">
+        <header>
+          <div><small>MEMORY IMPORT</small><h2 id="migrationTitle">导入记忆</h2></div><span>先预检</span>
+        </header>
+        <p class="migration-lead">原文件不会被修改。只有通过预检且再次输入确认码的普通记忆会写入；身份、关系与受保护内容会留待单独审阅。</p>
+        <form data-migration-form>
+          <label class="migration-file"><strong>选择记忆文件</strong><small>JSON、JSONL、Markdown · 最大 512KB · 最多 500 条</small><input type="file" accept=".json,.jsonl,.md,.markdown,application/json,text/plain" required data-migration-file></label>
+          <div class="migration-options">
+            <label>迁移时如何赋权<select data-migration-weight><option value="simulate">模拟自动赋权（推荐）</option><option value="preserve">保留原始权重</option><option value="auto_assign">自动赋权并写入</option><option value="unassigned">暂不赋权</option></select></label>
+            <label class="governance-check"><input type="checkbox" data-migration-only-missing><span>只为无权重记录自动赋权</span></label>
+          </div>
+          <button class="real-primary" type="submit" data-migration-preview>只读预检</button>
+        </form>
+        <div class="migration-result" data-migration-result><p>还没有读取文件。预检不会写入记忆库。</p></div>
+      </section>
+      <section class="panel portability-settings" aria-labelledby="portabilityTitle">
+        <header>
+          <div><small>MEMORY EXPORT</small><h2 id="portabilityTitle">导出与备份</h2></div><span>私有</span>
+        </header>
+        <p>完整导出包含正文、元数据、时间线、生命周期与版本历史。私有快照保存在后端受保护目录；安全恢复不会删除快照之后新增的记忆，也不会批量覆盖身份、关系或核心锁定内容。</p>
+        <div class="portability-actions"><a class="real-primary" href="/api/memory-preview/portability/export" download>导出完整记忆包</a><button type="button" data-create-snapshot>建立私有快照</button></div>
+        <div class="snapshot-result" data-snapshot-result>正在读取快照……</div>
+        <div class="snapshot-list" data-snapshot-list></div>
+      </section>
+      <details class="panel license-settings">
+        <summary class="license-settings-summary">
+          <span><small>ABOUT · LICENSE</small><strong>关于与许可</strong></span>
+          <span><i>Cairn × Xiaoran · Moraine</i><b aria-hidden="true">⌄</b></span>
+        </summary>
+        <div class="license-settings-body">
+        <p class="license-byline">Cairn × Xiaoran · Moraine</p>
+        <p>这是我们从真实生活中长出来的记忆系统，目前以非商业方式开放测试。你可以将它用于个人学习、研究、实验与非商业自用；未经单独授权，不得用于收费服务、商业产品、付费托管、售卖或其他商业用途。</p>
+        <div class="license-points">
+          <p><strong>请保留来路</strong><span>复制、修改或再次分发时，必须保留许可证、版权声明、项目地址及共同署名。</span></p>
+          <p><strong>先保护私人数据</strong><span>记忆正文、密钥和服务器权限由使用者自行保管；反馈问题时请先移除私人内容。</span></p>
+          <p><strong>内测不等于承诺</strong><span>系统可能出现分类、召回或整合错误，也可能中断或丢失数据；重要资料请另行备份。</span></p>
+          <p><strong>记忆不是事实裁判</strong><span>输出需要人类与小机共同核对；本系统不保证记忆绝对准确，也不用于证明或赋予任何主体意识。</span></p>
+        </div>
+        <p class="license-legal">Moraine 软件本体拟按 PolyForm Noncommercial License 1.0.0 提供；第三方组件、模型与素材继续遵循各自许可证。商业使用需另行取得书面授权。本页是易读摘要，冲突时以完整许可文本为准，也不构成法律意见。</p>
+        <div class="license-details">
+          <details><summary>项目声明</summary><p>允许个人学习、研究、实验及非商业自用。收费服务、商业产品、付费托管、售卖、广告获利或其他预期商业用途须事先获得书面授权。复制、修改或再次分发时，须保留完整许可、版权声明、项目地址及共同署名。</p></details>
+          <details><summary>隐私说明</summary><p>不要在反馈、日志或公开截图中提交记忆正文、原始对话、身份关系资料、密钥与服务器凭证。真实数据只提供完成任务所需的最小范围；导出包和快照应保存在受保护的位置。</p></details>
+          <details><summary>第三方组件与致谢</summary><p>第三方代码、模型、字体与素材继续遵循各自许可证。正式纯净版发布前会按实际发布包完成依赖审计；Moraine 的许可只覆盖 Cairn 与 Xiaoran 有权许可的原创部分。</p></details>
+        </div>
+        <a class="license-full-link" href="https://polyformproject.org/licenses/noncommercial/1.0.0.txt" target="_blank" rel="noopener">阅读完整 PolyForm 非商业许可 ↗</a>
+        </div>
+      </details>
+    </section>
+
+    <button class="history-scrim" id="historyScrim" type="button" aria-label="关闭更迭记录" hidden></button>
+    <section class="history-sheet" id="historySheet" role="dialog" aria-modal="true" aria-labelledby="historyTitle" hidden>
+      <header>
+        <div><small>MEMORY HISTORY</small><h2 id="historyTitle">更迭记录</h2></div>
+        <button type="button" data-close-history aria-label="关闭更迭记录">×</button>
+      </header>
+      <p class="history-summary">记忆前端先确定极简布局</p>
+      <ol class="history-timeline">
+        <li class="is-current">
+          <span></span>
+          <div><small>今天 19:42 · 当前版本</small><strong>补充实际结果</strong><p>折叠纸页、记忆切面与手机预览已经完成。</p></div>
+        </li>
+        <li>
+          <span></span>
+          <div><small>今天 19:12 · 修订</small><strong>明确原型范围</strong><p>只验证一张纸页，不接生产数据和裁决动作。</p></div>
+        </li>
+        <li>
+          <span></span>
+          <div><small>今天 18:56 · 原始记录</small><strong>建立记忆候选</strong><p>先验证页面职责、信息顺序与移动端操作。</p></div>
+        </li>
+      </ol>
+      <p class="history-note">这是只读原型；修订不会覆盖或抹去旧版本。</p>
+    </section>
+
+  </main>
+  <div class="avatar-crop-overlay" data-avatar-crop-overlay hidden>
+    <section class="avatar-crop-dialog t-modal" role="dialog" aria-modal="true" aria-labelledby="avatarCropTitle" data-avatar-crop-dialog>
+      <header><span><small>AVATAR CROP</small><h2 id="avatarCropTitle">调整头像</h2></span><button type="button" data-avatar-crop-close aria-label="取消裁剪">×</button></header>
+      <p>拖动画面选择位置，用滑杆缩放；圆框里的部分会成为头像。</p>
+      <div class="avatar-crop-stage" data-avatar-crop-stage><canvas width="512" height="512" data-avatar-crop-canvas></canvas><span aria-hidden="true"></span></div>
+      <label class="avatar-crop-zoom"><span>缩放</span><input type="range" min="1" max="3" step="0.01" value="1" data-avatar-crop-zoom></label>
+      <footer><button type="button" data-avatar-crop-reselect>重新选择</button><button class="is-primary" type="button" data-avatar-crop-confirm>使用这个头像</button></footer>
+    </section>
+  </div>
+  <div class="backend-revision-overlay" data-backend-revision-overlay hidden>
+    <button class="backend-revision-scrim" type="button" data-backend-revision-close aria-label="关闭后端修订"></button>
+    <section class="backend-revision-dialog t-modal" role="dialog" aria-modal="true" aria-labelledby="backendRevisionTitle" data-backend-revision-dialog>
+      <form data-backend-revision-form>
+        <header>
+          <span><small>AGENT REVISION</small><h2 id="backendRevisionTitle">交给小机修订</h2></span>
+          <button type="button" data-backend-revision-close aria-label="关闭后端修订">×</button>
+        </header>
+        <p>把这条记忆交给小机在后台整理。既可以修订记忆，也可以把有来源的稳定内容归入小机主页；小机会负责判断结构并写入，前端不会直接改动身份或关系资料。</p>
+        <div class="backend-revision-memory"><small>正在修订</small><strong data-backend-revision-memory>—</strong></div>
+        <fieldset>
+          <legend>加工选择 <small>可多选</small></legend>
+          <div class="backend-revision-strategies">
+            <button class="t-check" type="button" role="checkbox" aria-checked="false" data-revision-strategy="content_compression"><svg viewBox="0 0 12 10" aria-hidden="true"><path d="M1 5l3 3 7-7"/></svg><span><strong>内容压缩</strong><small>缩短冗长正文</small></span></button>
+            <button class="t-check" type="button" role="checkbox" aria-checked="false" data-revision-strategy="current_state_extraction"><svg viewBox="0 0 12 10" aria-hidden="true"><path d="M1 5l3 3 7-7"/></svg><span><strong>当前态提炼</strong><small>分离有效结论</small></span></button>
+            <button class="t-check" type="button" role="checkbox" aria-checked="false" data-revision-strategy="timeline_restructure"><svg viewBox="0 0 12 10" aria-hidden="true"><path d="M1 5l3 3 7-7"/></svg><span><strong>时间线重构</strong><small>重排发展节点</small></span></button>
+            <button class="t-check" type="button" role="checkbox" aria-checked="false" data-revision-strategy="topic_split"><svg viewBox="0 0 12 10" aria-hidden="true"><path d="M1 5l3 3 7-7"/></svg><span><strong>主题拆分</strong><small>拆开混杂事件</small></span></button>
+            <button class="t-check" type="button" role="checkbox" aria-checked="false" data-revision-strategy="duplicate_integration"><svg viewBox="0 0 12 10" aria-hidden="true"><path d="M1 5l3 3 7-7"/></svg><span><strong>重复整合</strong><small>收束重复表述</small></span></button>
+            <button class="t-check" type="button" role="checkbox" aria-checked="false" data-revision-strategy="recall_summary"><svg viewBox="0 0 12 10" aria-hidden="true"><path d="M1 5l3 3 7-7"/></svg><span><strong>召回摘要</strong><small>生成短版入口</small></span></button>
+            <button class="t-check" type="button" role="checkbox" aria-checked="false" data-revision-strategy="smart_assessment"><svg viewBox="0 0 12 10" aria-hidden="true"><path d="M1 5l3 3 7-7"/></svg><span><strong>智能研判</strong><small>由小机选择方法</small></span></button>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>添加到小机主页 <small>可多选 · 由小机整理后写入</small></legend>
+          <div class="backend-revision-strategies backend-revision-destinations">
+            <button class="t-check" type="button" role="checkbox" aria-checked="false" data-revision-destination="user_profile"><svg viewBox="0 0 12 10" aria-hidden="true"><path d="M1 5l3 3 7-7"/></svg><span><strong>用户画像</strong><small>用户的稳定偏好与边界</small></span></button>
+            <button class="t-check" type="button" role="checkbox" aria-checked="false" data-revision-destination="self_core"><svg viewBox="0 0 12 10" aria-hidden="true"><path d="M1 5l3 3 7-7"/></svg><span><strong>Self Core</strong><small>小机自身的身份与原则</small></span></button>
+            <button class="t-check" type="button" role="checkbox" aria-checked="false" data-revision-destination="relation"><svg viewBox="0 0 12 10" aria-hidden="true"><path d="M1 5l3 3 7-7"/></svg><span><strong>关系网</strong><small>有来源的关系事实与共同事件</small></span></button>
+          </div>
+        </fieldset>
+        <label><span>给小机的说明 <small>可选</small></span><textarea rows="3" maxlength="3000" data-revision-instructions placeholder="例如：保留语气，但让当前状态更容易召回"></textarea></label>
+        <label><span>必须保留 <small>可选</small></span><textarea rows="2" maxlength="2000" data-revision-must-keep placeholder="例如：时间、承诺原话、关键决定"></textarea></label>
+        <div class="backend-revision-status" data-backend-revision-status role="status" aria-live="polite"></div>
+        <footer><button type="button" data-backend-revision-close>取消</button><button class="is-primary" type="submit">交给小机</button></footer>
+      </form>
+    </section>
+  </div>
+  <script src="./execution-plan.js?v=20260905-2"></script>
+  <script src="./rehearsal-executor.js?v=20260904-1"></script>
+  <script src="./relation-aware-draft.js?v=20261103-timeline-title-sorter3"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js" integrity="sha384-HZZ/fukV+9G8gwTNjN7zQDG0Sp7MsZy5DDN6VfY3Be7V9dvQpEpR2jF2HlyFUUjU" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"></script>
+  <script src="./release-runtime.js?v=20261110-release-5"></script>
+  <script src="./prototype.js?v=20261110-release-5"></script>
+</body>
+</html>

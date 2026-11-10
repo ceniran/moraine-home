@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import re
 from typing import Mapping, Sequence
 
 
@@ -74,10 +75,17 @@ def derive_tiering_evidence(candidate: Mapping, snapshot: Mapping) -> dict:
 
 def infer_text_tiering(candidate: Mapping, *, semantic_neighbors: Sequence[Mapping] | None = None,
                        semantic_mode: str = "unavailable") -> dict:
-    """Use explainable keyword evidence, with local semantics only as support."""
+    """Build explainable prose signals without treating similarity as truth.
+
+    Keywords are hard routing evidence. Local semantic neighbours may only
+    reinforce an ordinary recent/long-term suggestion; they can never route a
+    protected identity, relationship, or boundary record by themselves.
+    """
     text = " ".join((str(candidate.get("title") or ""), str(candidate.get("content") or ""))).casefold()
-    protected_hits = {name: [term for term in terms if term.casefold() in text]
-                      for name, terms in PROTECTED_TEXT_RULES.items()}
+    protected_hits = {
+        name: [term for term in terms if term.casefold() in text]
+        for name, terms in PROTECTED_TEXT_RULES.items()
+    }
     protected_hits = {name: hits for name, hits in protected_hits.items() if hits}
     explicit_kind = str(candidate.get("kind") or "event").strip().casefold()
     if explicit_kind in PROTECTED_KINDS:
@@ -87,6 +95,7 @@ def infer_text_tiering(candidate: Mapping, *, semantic_neighbors: Sequence[Mappi
         blockers.append("hypothetical_or_conditional")
     if any(term in text for term in OTHER_SUBJECT_RULES):
         blockers.append("other_subject_unconfirmed")
+
     recent_hits = [term for term in RECENT_TEXT_RULES if term in text]
     durable_hits = [term for term in DURABLE_TEXT_RULES if term in text]
     votes = {"recent": 0.0, "long_term": 0.0}
@@ -105,13 +114,15 @@ def infer_text_tiering(candidate: Mapping, *, semantic_neighbors: Sequence[Mappi
     if semantic_tier and min(votes.values()) and abs(votes["recent"] - votes["long_term"]) < 0.2:
         blockers.append("semantic_neighbors_disagree")
         semantic_tier = None
+
     if protected_hits:
         suggestion, confidence = "uncertain", "high"
         blockers.append("protected_text_requires_specialized_review")
     elif blockers:
         suggestion, confidence = "uncertain", "low"
     elif durable_hits:
-        suggestion, confidence = "long_term", ("high" if len(durable_hits) >= 2 or semantic_tier == "long_term" else "medium")
+        suggestion = "long_term"
+        confidence = "high" if len(durable_hits) >= 2 or semantic_tier == "long_term" else "medium"
     elif recent_hits or _has_future_expiry(candidate.get("expires_at"), datetime.now(timezone.utc)):
         suggestion = "recent"
         confidence = "high" if candidate.get("expires_at") or semantic_tier == "recent" else "medium"
@@ -119,11 +130,15 @@ def infer_text_tiering(candidate: Mapping, *, semantic_neighbors: Sequence[Mappi
         suggestion, confidence = semantic_tier, "medium"
     else:
         suggestion, confidence = "uncertain", "low"
+
     return {
-        "suggested_tier": suggestion, "confidence": confidence,
+        "suggested_tier": suggestion,
+        "confidence": confidence,
         "keyword_hits": {"protected": protected_hits, "recent": recent_hits, "durable": durable_hits},
         "semantic": {"mode": semantic_mode, "neighbors": semantic_evidence, "vote": semantic_tier},
-        "blockers": list(dict.fromkeys(blockers)), "protected": bool(protected_hits), "persisted": False,
+        "blockers": list(dict.fromkeys(blockers)),
+        "protected": bool(protected_hits),
+        "persisted": False,
     }
 
 

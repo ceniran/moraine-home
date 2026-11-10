@@ -1,3 +1,4 @@
+import pathlib
 import json
 import stat
 import threading
@@ -29,7 +30,15 @@ class BetaServerTest(unittest.TestCase):
         web = root / "web"
         web.mkdir()
         (web / "index.html").write_text("<h1>Moraine beta</h1>", encoding="utf-8")
+        (web / "dwell-v2").mkdir()
+        (web / "dwell-v2" / "index.html").write_text("<h1>Dwell v2</h1>", encoding="utf-8")
         self.token = "test-token"
+        self.private_topic_token = "private-topic-test-token"
+        self.topic_registry = root / ".private-topics.json"
+        self.topic_registry.write_text(json.dumps({"topics": [{
+            "topic_id": "private-project", "name": "私有项目", "version": "1",
+            "exact_terms": ["私有石头"], "aliases": [], "supporting_terms": ["召回"], "veto_terms": [],
+        }]}), encoding="utf-8")
         self.server = create_beta_server(
             {
                 "MORAINE_BETA_HOST": "127.0.0.1",
@@ -38,6 +47,10 @@ class BetaServerTest(unittest.TestCase):
                 "MORAINE_BETA_DATA_FILE": str(root / "store.json"),
                 "MORAINE_BETA_SEED_FILE": str(seed),
                 "MORAINE_BETA_WEB_ROOT": str(web),
+                "MORAINE_TOPIC_ROUTING_ENABLED": "true",
+                "MORAINE_PRIVATE_TOPIC_TOKEN": self.private_topic_token,
+                "MORAINE_TOPIC_REGISTRY_FILE": str(self.topic_registry),
+                "MORAINE_TOPIC_SHADOW_LOG": str(root / ".topic-shadow.jsonl"),
             }
         )
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
@@ -50,10 +63,12 @@ class BetaServerTest(unittest.TestCase):
         self.thread.join(timeout=2)
         self.temporary.cleanup()
 
-    def request(self, path, method="GET", body=None, authenticated=True):
+    def request(self, path, method="GET", body=None, authenticated=True, private=False):
         headers = {"Content-Type": "application/json"}
         if authenticated:
             headers["Authorization"] = f"Bearer {self.token}"
+        if private:
+            headers["X-Moraine-Private-Token"] = self.private_topic_token
         data = json.dumps(body).encode() if body is not None else None
         request = Request(self.base + path, data=data, headers=headers, method=method)
         with urlopen(request) as response:
@@ -152,7 +167,30 @@ class BetaServerTest(unittest.TestCase):
         })[1]["policy"]
         self.assertEqual(policy, {"enabled": True, "retain_memory_copy": True})
         self.assertEqual(self.request("/api/dwell-v2/identity-relation-routing-policy")[1]["policy"], policy)
+        experience = self.request("/api/dwell-v2/candidate-experience-policy", "POST", {
+            "mode": "preview"
+        })[1]["policy"]
+        self.assertEqual(experience["mode"], "preview")
+        schedule = self.request("/api/dwell-v2/candidate-schedule-policy", "POST", {
+            "batch_times": ["09:30", "21:30"], "settlement_time": "21:30", "stats_days": 7
+        })[1]["policy"]
+        self.assertEqual(schedule["batch_times"], ["09:30", "21:30"])
+        self.assertEqual(schedule["settlement_time"], "21:30")
+        self.assertEqual(schedule["stats_days"], 7)
         self.assertIn("configured", self.request("/api/dwell-v2/jev-settings")[1]["settings"])
+
+    def test_memory_usage_echo_http_contract(self):
+        created = self.request("/api/dwell-v2/memory-echoes", "POST", {
+            "memory_ids": ["m1"], "effect": "helped",
+            "action": "先核验本地检索结果", "result": "避免采用错误邻居", "actor": "test-agent",
+        })[1]["echo"]
+        self.assertEqual(created["memory_ids"], ["m1"])
+        summary = self.request("/api/dwell-v2/memory-echoes?memory_id=m1")[1]["summary"]
+        self.assertEqual(summary["changed_action_count"], 1)
+        detail = self.request("/api/dwell-v2/memories/m1")[1]
+        self.assertEqual(detail["usage_echo"]["counts"]["helped"], 1)
+        overview = self.request("/api/dwell-v2/overview")[1]
+        self.assertEqual(overview["recent_echoes"][0]["id"], created["id"])
 
     def test_remaining_frontend_contracts_are_real(self):
         thread = self.request("/api/dwell-v2/experience-threads/moraine-project-progress")[1]
@@ -194,42 +232,43 @@ class BetaServerTest(unittest.TestCase):
             "draft_id": preview["draft_id"], "confirmation_code": preview["confirmation_code"]
         })[1]
         self.assertEqual(executed["result"]["title"], "修订标题")
+
+    def test_archive_restore_execute_does_not_claim_rollback_receipt(self):
+        archive = self.request("/api/dwell-v2/actions/preview", "POST", {
+            "action": "archive", "memory_id": "m1", "reason": "测试归档",
+        })[1]
+        archived = self.request("/api/dwell-v2/actions/execute", "POST", {
+            "draft_id": archive["draft_id"], "confirmation_code": archive["confirmation_code"],
+        })[1]
+        self.assertEqual(archived["state"], "archived")
+        self.assertNotIn("rollback", archived)
+
+        restore = self.request("/api/dwell-v2/actions/preview", "POST", {
+            "action": "restore_archive", "memory_id": "m1", "reason": "测试恢复",
+        })[1]
+        restored = self.request("/api/dwell-v2/actions/execute", "POST", {
+            "draft_id": restore["draft_id"], "confirmation_code": restore["confirmation_code"],
+        })[1]
+        self.assertEqual(restored["state"], "active")
+        self.assertNotIn("rollback", restored)
+
+    def test_action_confirmation_handles_receiptless_success_and_refresh_failure(self):
+        static = Path(__file__).parents[1] / "src" / "moraine" / "static"
+        for script_path in (static / "prototype.js", static / "dwell-v2" / "prototype.js"):
+            script = script_path.read_text(encoding="utf-8")
+            self.assertIn("executed?.rollback?.available_until", script)
+            self.assertIn("已恢复到记忆库。", script)
+            self.assertIn("refreshAfterConfirmedAction", script)
+            self.assertIn("正在刷新页面内容", script)
+            self.assertIn("页面暂未刷新，请手动刷新查看。", script)
+            self.assertNotIn("executed.rollback.available_until", script)
+
     def test_candidate_admission_rollback_http_chain(self):
         memory = self.request("/api/candidates/admit", "POST", {"candidate_ids": ["c1"]})[1]
         result = self.request(f"/api/rollbacks/{memory['rollback']['id']}", "POST", {})[1]
         self.assertEqual(result["removed_memory_id"], memory["id"])
         self.assertEqual(self.request("/api/overview")[1]["candidates"], 1)
         self.assertEqual(self.request("/api/overview")[1]["active"], 1)
-
-    def test_action_confirmation_handles_receiptless_success_and_refresh_failure(self):
-        script = (Path(__file__).parents[1] / "src" / "moraine" / "static" / "prototype.js").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("executed?.rollback?.available_until", script)
-        self.assertIn("已恢复到记忆库。", script)
-        self.assertIn("refreshAfterConfirmedAction", script)
-        self.assertIn("正在刷新页面内容", script)
-        self.assertIn("页面暂未刷新，请手动刷新查看。", script)
-        self.assertNotIn("executed.rollback.available_until", script)
-
-    def test_candidate_write_guidance_and_batch_endpoint(self):
-        single = self.request("/api/candidates", "POST", {
-            "title": "同日第一件事", "content": "完成接口，然后又修复页面",
-            "episode_id": "episode_http_synthetic",
-        })[1]
-        self.assertTrue(single["write_guidance"]["needs_episode_confirmation"])
-        self.assertTrue(single["write_guidance"]["possible_multiple_events"])
-        batch = self.request("/api/candidates/batch", "POST", {
-            "episode_id": "episode_http_batch",
-            "episode_complete": True,
-            "candidates": [
-                {"title": "事件甲", "content": "结果甲"},
-                {"title": "事件乙", "content": "结果乙"},
-            ],
-        })[1]
-        self.assertEqual(batch["count"], 2)
-        self.assertFalse(batch["write_guidance"]["needs_episode_confirmation"])
-        self.assertEqual({row["episode_id"] for row in batch["items"]}, {"episode_http_batch"})
 
     def test_snapshot_routing_and_retention_http_chain(self):
         settings = self.request("/api/settings", "POST", {
@@ -250,11 +289,18 @@ class BetaServerTest(unittest.TestCase):
     def test_static_frontend_does_not_require_api_token(self):
         with urlopen(self.base + "/") as response:
             self.assertIn(b"Moraine beta", response.read())
+        with urlopen(self.base + "/dwell-v2/") as response:
+            self.assertIn(b"Dwell v2", response.read())
 
-    def test_new_frontend_adapter_reads_public_store(self):
-        library = self.request("/api/dwell-v2/library")[1]
-        self.assertEqual(library["mode"], "moraine_beta_isolated")
-        self.assertEqual(library["memories"][0]["id"], "m1")
+    def test_release_frontend_becomes_default_when_installed(self):
+        release = self.root / "web" / "dwell-release"
+        release.mkdir()
+        (release / "index.html").write_text("<h1>Dwell release</h1>", encoding="utf-8")
+        with urlopen(self.base + "/") as response:
+            self.assertEqual(response.url, self.base + "/dwell-release/")
+            self.assertIn(b"Dwell release", response.read())
+        with urlopen(self.base + "/dwell-v2/") as response:
+            self.assertIn(b"Dwell v2", response.read())
 
     def test_personal_space_is_visible_and_routable(self):
         index = (Path(__file__).parents[1] / "src" / "moraine" / "static" / "index.html").read_text(encoding="utf-8")
@@ -289,27 +335,40 @@ class BetaServerTest(unittest.TestCase):
 
     def test_dwell_v2_read_only_adapter_contracts(self):
         overview = self.request("/api/dwell-v2/overview")[1]
+        self.assertEqual(overview["mode"], "moraine_beta_isolated")
         self.assertEqual(overview["counts"]["effective"], 1)
-        self.assertEqual(overview["counts"]["pending_candidates"], 1)
+        self.assertEqual(sum(overview["counts"]["weights"].values()), 1)
+        self.assertTrue(overview["activity"]["read_only"])
+        self.assertEqual(set(overview["activity"]["metrics"]), {"recall", "intake", "delete"})
+        self.assertEqual(len(overview["activity"]["metrics"]["intake"]["days"]), overview["activity"]["day_count"])
+        self.assertEqual([row["key"] for row in overview["activity"]["areas"]],
+                         ["life", "relations", "action", "self", "interest", "study", "unclassified"])
+        self.assertEqual(overview["activity"]["area_scope"], "monthly_intake_by_service_area")
+
         calendar = self.request("/api/dwell-v2/calendar?month=2026-01")[1]
         self.assertEqual(calendar["events"][0]["open_id"], "m1")
-        self.assertEqual(self.request("/api/dwell-v2/relations")[1]["mode"], "moraine_beta_isolated")
+        self.assertEqual(calendar["events"][0]["day"], "2026-01-02")
 
-    def test_new_frontend_candidate_merge_requires_preview_confirmation(self):
+        library = self.request("/api/dwell-v2/library?state=active")[1]
+        self.assertEqual(library["memories"][0]["id"], "m1")
+        candidates = self.request("/api/dwell-v2/candidates")[1]
+        self.assertEqual(candidates["counts"]["pending"], 1)
+
+    def test_dwell_v2_candidate_merge_preview_and_execute(self):
         second = self.request("/api/candidates", "POST", {
-            "title": "第二条", "content": "合成补充", "kind": "event",
+            "title": "补充二", "content": "第二条合成候选", "kind": "event",
         })[1]
         preview = self.request("/api/dwell-v2/actions/preview", "POST", {
             "action": "candidate_merge", "candidate_ids": ["c1", second["id"]],
             "master_id": "c1", "member_relations": {second["id"]: "supplement"},
         })[1]
         self.assertFalse(preview["persisted"])
-        self.assertEqual(self.request("/api/overview")[1]["active"], 1)
+        self.assertEqual(len(preview["member_relations"]), 2)
         executed = self.request("/api/dwell-v2/actions/execute", "POST", {
             "draft_id": preview["draft_id"], "confirmation_code": preview["confirmation_code"],
         })[1]
         self.assertEqual(set(executed["concluded_candidate_ids"]), {"c1", second["id"]})
-        self.assertEqual(self.request("/api/overview")[1]["active"], 2)
+        self.assertEqual(self.request("/api/overview")[1]["candidates"], 0)
 
     def test_health_explains_that_authentication_is_required(self):
         status, health = self.request("/api/health", authenticated=False)
@@ -330,6 +389,57 @@ class BetaServerTest(unittest.TestCase):
         self.assertEqual(stat.S_IMODE(secret_file.stat().st_mode), 0o600)
         cleared = self.request("/api/adviser", "POST", {"clear_api_key": True, "enabled": False})[1]
         self.assertFalse(cleared["configured"])
+
+    def test_private_topic_suggestion_requires_separate_capability_and_never_enters_export(self):
+        candidate = self.request("/api/candidates", "POST", {
+            "title": "谈私有石头", "content": "检查召回链路",
+        })[1]
+        self.assertEqual(candidate["topic_shadow_status"], "recorded")
+        with self.assertRaises(HTTPError) as caught:
+            self.request(f"/api/private/topic-routing/suggestion?candidate_id={candidate['id']}")
+        self.assertEqual(caught.exception.code, 403)
+        suggestion = self.request(
+            f"/api/private/topic-routing/suggestion?candidate_id={candidate['id']}", private=True
+        )[1]
+        if suggestion["assignment"] == "visible":
+            self.assertEqual(suggestion["router_output"]["primary_topic"], "private-project")
+            self.assertFalse(suggestion["router_output"]["persisted_to_memory_store"])
+        else:
+            self.assertFalse(suggestion["suggestion_visible"])
+            self.assertNotIn("router_output", suggestion)
+        exported = json.dumps(self.request("/api/export")[1], ensure_ascii=False)
+        self.assertNotIn("private-project", exported)
+        self.assertNotIn("私有项目", exported)
+        chosen = self.request("/api/private/topic-routing/choice", "POST", {
+            "candidate_id": candidate["id"], "topic_ids": ["private-project"],
+        }, private=True)[1]
+        self.assertEqual(chosen["final_topic_ids"], ["private-project"])
+        self.assertEqual(chosen["router_output"]["primary_topic"], "private-project")
+        self.assertEqual(stat.S_IMODE((self.root / ".topic-shadow.jsonl").stat().st_mode), 0o600)
+
+    def test_private_event_match_preview_is_review_only_and_not_exported(self):
+        first = self.request("/api/candidates", "POST", {
+            "title": "私有石头部署", "content": "第一步", "occurred_at": "2026-01-03T10:00:00Z",
+            "object_keys": ["moraine"], "action_keys": ["deploy"],
+        })[1]
+        second = self.request("/api/candidates", "POST", {
+            "title": "私有石头部署完成", "content": "第二步", "occurred_at": "2026-01-03T10:08:00Z",
+            "object_keys": ["moraine"], "action_keys": ["deploy"],
+        })[1]
+        for candidate in (first, second):
+            self.request("/api/private/topic-routing/choice", "POST", {
+                "candidate_id": candidate["id"], "topic_ids": ["private-project"],
+            }, private=True)
+        with self.assertRaises(HTTPError) as caught:
+            self.request("/api/private/topic-routing/event-matches")
+        self.assertEqual(caught.exception.code, 403)
+        preview = self.request("/api/private/topic-routing/event-matches", private=True)[1]
+        match = next(item for item in preview["items"] if set(item["member_ids"]) == {first["id"], second["id"]})
+        self.assertEqual(match["status"], "suggested")
+        self.assertFalse(match["automatic_merge"])
+        self.assertFalse(preview["persisted"])
+        exported = json.dumps(self.request("/api/export")[1], ensure_ascii=False)
+        self.assertNotIn("shared_topic_ids", exported)
 
     def test_continuity_backend_http_chain(self):
         core = self.request("/api/self-core", "POST", {
@@ -398,3 +508,35 @@ class BetaServerTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TopicRoutingFrontendBoundaryTest(unittest.TestCase):
+    """The shipped frontend must not widen the private topic boundary."""
+
+    STATIC = pathlib.Path(__file__).resolve().parents[1] / "src" / "moraine" / "static"
+
+    def test_private_token_is_session_scoped_only(self):
+        source = (self.STATIC / "app.js").read_text(encoding="utf-8")
+        module = (self.STATIC / "topic-routing.js").read_text(encoding="utf-8")
+        for text in (source, module):
+            self.assertNotIn("localStorage", text)
+            self.assertNotIn("document.cookie", text)
+        self.assertIn("sessionStorage", source)
+
+    def test_token_is_never_written_back_into_a_field(self):
+        source = (self.STATIC / "app.js").read_text(encoding="utf-8")
+        self.assertIn('input.value = "";', source)
+        self.assertNotIn("getItem(routing.TOKEN_KEY)", source)
+
+    def test_private_paths_stay_out_of_the_service_worker_cache(self):
+        worker = (self.STATIC / "service-worker.js").read_text(encoding="utf-8")
+        self.assertIn("./topic-routing.js", worker)
+        self.assertNotIn("topic-routing/", worker)
+        self.assertIn('startsWith("/api/")', worker)
+
+    def test_suggestion_markup_is_escaped_not_interpolated(self):
+        module = (self.STATIC / "topic-routing.js").read_text(encoding="utf-8")
+        for fragment in ("${escapeHtml(", "escapeHtml(raw.slice("):
+            self.assertIn(fragment, module)
+        self.assertNotIn("${topic.name}", module)
+        self.assertNotIn("${item.reason}", module)

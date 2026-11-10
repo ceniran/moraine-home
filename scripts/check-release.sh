@@ -11,7 +11,7 @@ if grep -RniE --binary-files=without-match --exclude='*.pyc' --exclude-dir='__py
   exit 1
 fi
 
-PYTHONPATH=src python3 -m unittest tests.test_beta_store tests.test_beta_server
+PYTHONPATH=src python3 -m unittest tests.test_beta_store tests.test_beta_server tests.test_dwell_release
 if PYTHONPATH=src python3 -c 'import mcp' 2>/dev/null; then
   PYTHONPATH=src python3 -m unittest tests.test_mcp_server
 else
@@ -23,6 +23,12 @@ node --check src/moraine/static/prototype.js
 node --check src/moraine/static/execution-plan.js
 node --check src/moraine/static/rehearsal-executor.js
 node --check src/moraine/static/relation-aware-draft.js
+node --check src/moraine/static/dwell-release/auth.js
+node --check src/moraine/static/dwell-release/prototype.js
+node --check src/moraine/static/dwell-release/release-runtime.js
+node --check src/moraine/static/dwell-release/execution-plan.js
+node --check src/moraine/static/dwell-release/rehearsal-executor.js
+node --check src/moraine/static/dwell-release/relation-aware-draft.js
 git diff --check
 
 echo "release check: ok"

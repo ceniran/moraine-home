@@ -15,13 +15,19 @@
   const organizeToggle = document.querySelector('[data-toggle-organize]');
   const organizePanel = document.querySelector('#organizePanel');
   const organizeControl = organizeToggle.closest('.t-acc');
-  const arrangementBar = document.querySelector('.t-tabs');
+  const arrangementBar = document.querySelector('.arrangement-options');
   const arrangementPill = arrangementBar.querySelector('.t-tabs-pill');
   const workbenchBar = document.querySelector('.workbench-tabs');
   const workbenchTabs = [...document.querySelectorAll('[data-workbench-step]')];
   const workbenchPill = document.querySelector('.workbench-tabs .t-tabs-pill');
   const ownershipTabs = [...document.querySelectorAll('[data-ownership-mode]')];
   const ownershipPill = document.querySelector('.governance-ownership-tabs .t-tabs-pill');
+  const activityBar = document.querySelector('.memory-activity-tabs');
+  const activityTabs = [...document.querySelectorAll('[data-activity-metric]')];
+  const activityPill = activityBar?.querySelector('.t-tabs-pill');
+  let memoryActivityData = null;
+  let activeActivityMetric = 'recall';
+  let selectedActivityDay = null;
   const mergeStepTabs = [...document.querySelectorAll('[data-merge-step]')];
   let activeMemoryFilter = 'all';
   let activeMemoryView = 'time';
@@ -155,6 +161,77 @@
     return `${Math.round(hours / 24)} 天前`;
   }
 
+  const activityMeta = {
+    recall: { label: '本月召回', legend: '召回记录', note: '仅统计留下使用回声的召回', noun: '次召回', color: '#4b8cff' },
+    intake: { label: '本月入库', legend: '入库记录', note: '记忆进入库中的真实时间', noun: '条入库', color: '#66bfe8' },
+    delete: { label: '本月删除', legend: '删除记录', note: '含可恢复归档与候选内容清除', noun: '条删除', color: '#7d9fca' },
+  };
+  function moveActivityPill(tab, animate = true) {
+    if (!activityPill || !tab) return;
+    if (!animate) { const previous = activityPill.style.transition; activityPill.style.transition = 'none'; activityPill.style.transform = `translateX(${tab.offsetLeft}px)`; activityPill.style.width = `${tab.offsetWidth}px`; void activityPill.offsetWidth; activityPill.style.transition = previous; return; }
+    activityPill.style.transform = `translateX(${tab.offsetLeft}px)`; activityPill.style.width = `${tab.offsetWidth}px`;
+  }
+  function swapActivityText(element, next) {
+    if (!element) return;
+    const duration = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--text-swap-dur')) || 150;
+    element.classList.add('is-exit');
+    window.setTimeout(() => { element.textContent = next; element.classList.remove('is-exit'); element.classList.add('is-enter-start'); void element.offsetHeight; element.classList.remove('is-enter-start'); }, duration);
+  }
+  function setActivityDigits(text) {
+    const host = document.querySelector('[data-activity-value]');
+    if (!host) return;
+    host.classList.remove('is-animating');
+    host.replaceChildren(...[...String(text)].map((character, index, characters) => { const digit = document.createElement('span'); digit.className = 't-digit'; digit.textContent = character; if (index === characters.length - 2) digit.dataset.stagger = '1'; else if (index === characters.length - 1) digit.dataset.stagger = '2'; return digit; }));
+    void host.offsetHeight; host.classList.add('is-animating');
+  }
+  function renderActivitySummary(day = null) {
+    const metric = memoryActivityData?.metrics?.[activeActivityMetric]; if (!metric) return;
+    const meta = activityMeta[activeActivityMetric]; const label = document.querySelector('[data-activity-label]'); const note = document.querySelector('[data-activity-note]'); const change = document.querySelector('[data-activity-change]'); const foot = document.querySelector('[data-activity-foot]');
+    if (day) { const count = Number(metric.days?.[day - 1] || 0); swapActivityText(label, `${Number(memoryActivityData.month.slice(5))}月${day}日`); swapActivityText(note, count ? `${count} ${meta.noun}留下活动记录` : `当天没有${meta.legend}`); setActivityDigits(count); change.hidden = true; foot.textContent = `已选择 ${Number(memoryActivityData.month.slice(5))} 月 ${day} 日`; return; }
+    swapActivityText(label, meta.label); swapActivityText(note, meta.note); setActivityDigits(metric.total || 0); change.hidden = false;
+    const percent = metric.change_percent; change.classList.toggle('is-down', Number(percent) < 0); change.querySelector('i').textContent = percent == null ? '·' : Number(percent) < 0 ? '↘' : '↗'; change.querySelector('b').textContent = percent == null ? '上月无记录' : `${Math.abs(Number(percent))}% 较上月`; foot.textContent = '点击日期查看当天';
+  }
+  function renderActivityGrid() {
+    const grid = document.querySelector('[data-activity-grid]'); const metric = memoryActivityData?.metrics?.[activeActivityMetric]; if (!grid || !metric) return;
+    const meta = activityMeta[activeActivityMetric]; const values = metric.days || []; const maximum = Math.max(1, ...values.map(Number)); grid.replaceChildren();
+    for (let index = 0; index < Number(memoryActivityData.start_weekday || 0); index += 1) { const empty = document.createElement('span'); empty.className = 'memory-activity-day is-empty'; grid.appendChild(empty); }
+    values.forEach((raw, index) => { const count = Number(raw || 0); const day = index + 1; const level = count === 0 ? 0 : Math.max(1, Math.ceil(count / maximum * 3)); const cell = document.createElement('button'); cell.type = 'button'; cell.className = `memory-activity-day${selectedActivityDay === day ? ' is-selected' : ''}`; cell.dataset.level = String(level); cell.setAttribute('aria-label', `${Number(memoryActivityData.month.slice(5))}月${day}日，${count}${meta.noun}`); cell.addEventListener('click', () => { selectedActivityDay = day; grid.querySelectorAll('.memory-activity-day').forEach(item => item.classList.toggle('is-selected', item === cell)); renderActivitySummary(day); }); grid.appendChild(cell); });
+  }
+  function renderMemoryActivity(activity) {
+    if (!activity?.metrics) return;
+    memoryActivityData = activity; selectedActivityDay = null; const meta = activityMeta[activeActivityMetric]; const card = document.querySelector('[data-memory-activity]'); card.style.setProperty('--activity-color', meta.color); document.querySelector('[data-activity-month]').textContent = activity.month.replace('-', ' · '); document.querySelector('[data-activity-legend]').textContent = meta.legend; renderActivityGrid(); renderActivitySummary();
+  }
+
+  function renderBackendProgress(payload) {
+    const progress = document.querySelector('[data-backend-progress]');
+    if (!progress) return;
+    const counts = payload.counts || {};
+    const activity = payload.activity || {};
+    const activeAreas = (activity.areas || []).filter(area => Number(area.total || 0) > 0).length;
+    const details = {
+      store: `${counts.effective || 0} 条有效记忆已读取`,
+      activity: `${Object.keys(activity.metrics || {}).length} 类活动统计已生成`,
+      areas: `${activeAreas} 个分区已更新`,
+    };
+    progress.classList.remove('is-paused');
+    progress.querySelectorAll('[data-backend-step]').forEach(step => {
+      step.classList.add('is-complete');
+      step.querySelector('small').textContent = details[step.dataset.backendStep] || '已完成';
+    });
+    progress.querySelector('[data-backend-state]').textContent = '本轮完成';
+    progress.querySelector('[data-backend-progress-line]').style.width = '100%';
+    progress.querySelector('[data-backend-updated]').textContent = `最近同步 ${relativeTime(payload.generated_at)}`;
+  }
+
+  function renderBackendFailure() {
+    const progress = document.querySelector('[data-backend-progress]');
+    if (!progress) return;
+    progress.classList.add('is-paused');
+    progress.querySelector('[data-backend-state]').textContent = '连接暂停';
+    progress.querySelector('[data-backend-progress-line]').style.width = '0%';
+    progress.querySelector('[data-backend-updated]').textContent = '未使用示例进度冒充真实状态';
+  }
+
   async function loadOverview() {
     const title = document.querySelector('[data-overview-title]');
     try {
@@ -163,46 +240,22 @@
       const payload = await response.json();
       const counts = payload.counts;
       overviewCounts = counts;
-      const pending = counts.pending_reviews + counts.pending_candidates;
-      title.textContent = pending ? `有 ${pending} 项等待看看` : '今天一切安静';
-      document.querySelector('[data-overview-subtitle]').textContent = pending ? '没有自动处理，等我们有空时再决定。' : '没有需要立刻处理的问题。';
-      const totalElement = document.querySelector('[data-total-count]');
-      const totalText = String(counts.weighted_effective ?? counts.effective);
-      totalElement.classList.remove('is-animating');
-      totalElement.replaceChildren(...[...totalText].map((character, index, characters) => {
-        const digit = document.createElement('span'); digit.className = 't-digit'; digit.textContent = character;
-        if (index === characters.length - 2) digit.dataset.stagger = '1';
-        else if (index === characters.length - 1) digit.dataset.stagger = '2';
-        return digit;
-      }));
-      void totalElement.offsetHeight;
-      totalElement.classList.add('is-animating');
-      const weights = counts.weights || { transient: 0, normal: 0, stable: 0, important: 0, core: 0 };
-      document.querySelector('[data-effective-count]').textContent = `${counts.weighted_effective ?? counts.effective} 条有效记忆 · 按当前权重`;
-      ['transient', 'normal', 'stable', 'important', 'core'].forEach(key => {
-        document.querySelector(`[data-weight-count="${key}"]`).textContent = weights[key] || 0;
-      });
-      const total = Math.max(1, ['transient', 'normal', 'stable', 'important', 'core'].reduce((sum, key) => sum + (weights[key] || 0), 0));
-      const coreEnd = weights.core / total * 100;
-      const importantEnd = coreEnd + weights.important / total * 100;
-      const stableEnd = importantEnd + weights.stable / total * 100;
-      const normalEnd = stableEnd + weights.normal / total * 100;
-      const ring = document.querySelector('[data-lifecycle-ring]');
-      ring.style.setProperty('--ring-gradient', `conic-gradient(#667077 0 ${coreEnd}%, #9699a6 ${coreEnd}% ${importantEnd}%, #aebbb3 ${importantEnd}% ${stableEnd}%, #c9ced1 ${stableEnd}% ${normalEnd}%, #e5e7e5 ${normalEnd}% 100%)`);
-      ring.setAttribute('aria-label', `核心 ${weights.core || 0}，重要 ${weights.important || 0}，稳定 ${weights.stable || 0}，普通 ${weights.normal || 0}，短暂 ${weights.transient || 0}`);
-      ring.classList.remove('is-animating'); void ring.offsetHeight; ring.classList.add('is-animating');
-      document.querySelector('[data-pending-count]').textContent = pending;
-      document.querySelector('[data-pending-reviews]').textContent = counts.pending_reviews ? `${counts.pending_reviews} 项等待我们一起决定` : '目前没有待审项目';
-      document.querySelector('[data-pending-candidates]').textContent = counts.pending_candidates ? `${counts.pending_candidates} 项等待 ${cairnProfile.display_name || 'Agent'} 判断` : '目前没有新候选';
-      const recentList = document.querySelector('[data-overview-recent]');
-      recentList.classList.remove('is-shown');
-      recentList.innerHTML = payload.recent.map((memory, index) => `<li style="--recent-index:${index}"><span class="event-dot" aria-hidden="true"></span><p><strong>${escapeHtml(memory.title)}</strong><small>${escapeHtml(relativeTime(memory.updated_at))}</small></p><span class="recent-state">${memory.state === 'archived' ? '已归档' : '有更新'}</span></li>`).join('') || '<li style="--recent-index:0"><span class="event-dot" aria-hidden="true"></span><p><strong>暂无变化</strong><small>记忆库目前为空</small></p></li>';
-      requestAnimationFrame(() => recentList.classList.add('is-shown'));
+      title.textContent = '记忆库保持同步';
+      document.querySelector('[data-overview-subtitle]').textContent = '活动、分区与使用回声已从真实数据更新。';
+      const echoHost = document.querySelector('[data-overview-echoes]');
+      const effectLabels = { helped: '帮到了我', used: '进入了判断', unused: '想起但未采用', misleading: '曾经带偏', outdated: '已经过时' };
+      echoHost.innerHTML = (payload.recent_echoes || []).map(echo => `<article><i class="is-${escapeHtml(echo.effect)}"></i><span><strong>${escapeHtml(echo.action)}</strong><small>${escapeHtml((echo.memories || []).map(memory => memory.title).join(' · ') || '来源记忆')} · ${escapeHtml(relativeTime(echo.occurred_at || echo.created_at))}</small></span><b>${escapeHtml(effectLabels[echo.effect] || echo.effect)}</b></article>`).join('') || '<small>还没有行动回声。记忆会先安静待着，不为了填满这里而制造结果。</small>';
+      renderMemoryActivity(payload.activity);
+      window.renderMoraineAreaStatistics?.(payload.activity);
+      renderBackendProgress(payload);
       document.querySelector('[data-overview-check]').textContent = `只读同步：${relativeTime(payload.generated_at)}`;
     } catch (_) {
       title.textContent = '暂时无法读取总览';
       document.querySelector('[data-overview-subtitle]').textContent = '真实记忆仍在原位，稍后可以安全重试。';
-      document.querySelector('[data-overview-recent]').innerHTML = '<li><p><strong>数据暂不可用</strong><small>没有使用示例数据替代</small></p></li>';
+      document.querySelector('[data-overview-echoes]').innerHTML = '<small>暂时无法读取回声；原记忆没有变化。</small>';
+      document.querySelector('[data-activity-note]').textContent = '暂时无法读取，未使用示例数据';
+      document.querySelector('[data-area-description]').textContent = '暂时无法读取，未使用示例数据';
+      renderBackendFailure();
       document.querySelector('[data-overview-check]').textContent = '只读同步失败';
     }
   }
@@ -264,7 +317,7 @@
     for (let day = 1; day <= dayCount; day += 1) {
       const date = `${calendarMonth}-${String(day).padStart(2, '0')}`;
       const events = byDay[date] || [];
-      cells.push(`<button type="button" data-calendar-day="${date}" aria-selected="${date === selectedCalendarDay}" class="${date === `${todayParts.year}-${todayParts.month}-${todayParts.day}` ? 'is-today' : ''}"><span>${day}</span>${events.length ? `<i>${Math.min(events.length, 9)}</i>` : ''}</button>`);
+      cells.push(`<button type="button" data-calendar-day="${date}" aria-selected="${date === selectedCalendarDay}" class="${[date === `${todayParts.year}-${todayParts.month}-${todayParts.day}` ? 'is-today' : '', events.length ? 'has-events' : ''].filter(Boolean).join(' ')}"><span>${day}</span>${events.length ? `<i>${Math.min(events.length, 9)}</i>` : ''}</button>`);
     }
     const grid = document.querySelector('[data-calendar-grid]');
     grid.innerHTML = cells.join('');
@@ -512,18 +565,22 @@
     const graph = document.querySelector('[data-relation-graph]');
     if (!graph) return;
     const owner = { id: 'cairn', name: cairnProfile.display_name || 'Moraine', role: '我', model: cairnProfile.agent_type || 'Agent', avatar: cairnProfile.avatar };
-    const nodes = [owner, ...cairnRelations];
+    const profileSubjectId = String(xiaoranUserProfile?.subject || '').trim();
+    const visibleRelations = cairnRelations.filter(item => !profileSubjectId || item.id !== profileSubjectId);
+    const nodes = [owner, ...visibleRelations];
     if (nodes.length === 1) { graph.innerHTML = '<p>暂时没有可展示的关系节点。</p>'; return; }
-    const outerRelations = cairnRelations.filter(item => item.id !== 'xiaoran');
-    const outerSlots = outerRelations.reduce((slots, item, index) => {
-      const count = Math.max(1, outerRelations.length);
-      const x = count === 1 ? 50 : 18 + (64 * index / (count - 1));
-      slots[item.id] = [x, 78];
-      return slots;
-    }, {});
-    const positions = { cairn: [50, 45], xiaoran: [50, 12], ...outerSlots };
-    const position = item => positions[item.id] || [50, 78];
-    const points = new Map(nodes.map((item, index) => [item.id, position(item, index)]));
+    const positions = { cairn: [50, 50] };
+    const relationCount = visibleRelations.length;
+    visibleRelations.forEach((item, index) => {
+      const ring = relationCount > 8 && index >= 8 ? 1 : 0;
+      const ringItems = ring ? relationCount - 8 : Math.min(relationCount, 8);
+      const ringIndex = ring ? index - 8 : index;
+      const radius = ring ? 24 : 39;
+      const angle = (-90 + (360 * ringIndex / Math.max(1, ringItems)) + (ring ? 22.5 : 0)) * Math.PI / 180;
+      positions[item.id] = [50 + Math.cos(angle) * radius, 50 + Math.sin(angle) * radius];
+    });
+    const position = item => positions[item.id] || [50, 50];
+    const points = new Map(nodes.map(item => [item.id, position(item)]));
     const lines = cairnRelationEdges.map((edge, index) => {
       const from = points.get(edge.from); const to = points.get(edge.to);
       if (!from || !to) return '';
@@ -536,7 +593,7 @@
     }).join('');
     const graphName = item => item.name.includes('/') ? item.name.split('/').pop().trim() : item.name;
     const graphRole = item => (item.model && item.model !== '未确认' ? item.model : item.role || '').split('·')[0].trim();
-    graph.innerHTML = `<div class="relation-canvas" data-relation-canvas><svg class="relation-lines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><defs><marker id="relationArrow" markerWidth="5" markerHeight="5" refX="4" refY="2.5" orient="auto"><path d="M0,0 L5,2.5 L0,5"></path></marker><marker id="relationArrowStart" markerWidth="5" markerHeight="5" refX="1" refY="2.5" orient="auto-start-reverse"><path d="M5,0 L0,2.5 L5,5"></path></marker></defs>${lines}</svg>${nodes.map(item => { const [x, y] = position(item); return `<button type="button" class="relation-person${item.id === 'cairn' ? ' is-owner' : ''}" style="--x:${x}%;--y:${y}%" ${item.id === 'cairn' ? 'disabled' : `data-relation-id="${escapeHtml(item.id)}" aria-pressed="false"`}><span class="relation-avatar">${relationAvatar(item)}</span><strong>${escapeHtml(graphName(item))}</strong><small>${escapeHtml(graphRole(item))}</small></button>`; }).join('')}</div><div class="relation-zoom-controls" aria-label="缩放关系星图"><button type="button" data-relation-zoom="out" aria-label="缩小">−</button><button type="button" data-relation-zoom="reset" aria-label="恢复原始大小">100%</button><button type="button" data-relation-zoom="in" aria-label="放大">＋</button></div>`;
+    graph.innerHTML = `<div class="relation-canvas" data-relation-canvas><div class="relation-orbit-stage"><svg class="relation-orbits" viewBox="0 0 100 100" aria-hidden="true"><circle class="relation-orbit-track" cx="50" cy="50" r="39"></circle>${relationCount > 8 ? '<circle class="relation-orbit-track is-inner" cx="50" cy="50" r="24"></circle>' : ''}<g class="relation-orbit-runner"><circle cx="89" cy="50" r=".9"></circle><circle cx="11" cy="50" r=".48"></circle></g><g class="relation-orbit-runner is-reverse"><circle class="is-warm" cx="50" cy="11" r=".72"></circle><circle cx="50" cy="89" r=".42"></circle></g></svg><svg class="relation-lines" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" aria-hidden="true"><defs><marker id="relationArrow" markerWidth="5" markerHeight="5" refX="4" refY="2.5" orient="auto"><path d="M0,0 L5,2.5 L0,5"></path></marker><marker id="relationArrowStart" markerWidth="5" markerHeight="5" refX="1" refY="2.5" orient="auto-start-reverse"><path d="M5,0 L0,2.5 L5,5"></path></marker></defs>${lines}</svg>${nodes.map((item,index) => { const [x, y] = position(item); return `<button type="button" class="relation-person${item.id === 'cairn' ? ' is-owner' : ''}" style="--x:${x}%;--y:${y}%;--pulse-delay:${(-index * .68).toFixed(2)}s" ${item.id === 'cairn' ? 'disabled' : `data-relation-id="${escapeHtml(item.id)}" aria-pressed="false"`}><span class="relation-avatar-wrap"><span class="relation-avatar">${relationAvatar(item)}</span></span><strong>${escapeHtml(graphName(item))}</strong><small>${escapeHtml(graphRole(item))}</small></button>`; }).join('')}</div></div>`;
     relationView = { scale: 1, x: 0, y: 0 };
     bindRelationViewport(graph);
     graph.querySelectorAll('[data-relation-id]').forEach(button => button.addEventListener('click', () => renderRelationDetail(button.dataset.relationId)));
@@ -549,8 +606,6 @@
     canvas.style.setProperty('--relation-scale', relationView.scale.toFixed(2));
     canvas.style.setProperty('--relation-pan-x', `${relationView.x}px`);
     canvas.style.setProperty('--relation-pan-y', `${relationView.y}px`);
-    const reset = graph.querySelector('[data-relation-zoom="reset"]');
-    if (reset) reset.textContent = `${Math.round(relationView.scale * 100)}%`;
   }
 
   function bindRelationViewport(graph) {
@@ -566,13 +621,54 @@
       else relationView.scale += action === 'in' ? .2 : -.2;
       clampView(); applyRelationView(graph);
     }));
+    const midpoint = touches => ({ x:(touches[0].clientX + touches[1].clientX) / 2, y:(touches[0].clientY + touches[1].clientY) / 2 });
+    const distance = touches => Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
+    let touchGesture = null;
+    graph.addEventListener('touchstart', event => {
+      if (event.touches.length >= 2) {
+        event.preventDefault();
+        const center = midpoint(event.touches);
+        touchGesture = { mode:'pinch', distance:Math.max(1, distance(event.touches)), scale:relationView.scale, center,
+          originX:relationView.x, originY:relationView.y };
+      } else if (event.touches.length === 1 && relationView.scale > 1) {
+        event.preventDefault();
+        touchGesture = { mode:'pan', x:event.touches[0].clientX, y:event.touches[0].clientY,
+          originX:relationView.x, originY:relationView.y };
+      }
+    }, { passive:false });
+    graph.addEventListener('touchmove', event => {
+      if (!touchGesture) return;
+      if (touchGesture.mode === 'pinch' && event.touches.length >= 2) {
+        event.preventDefault();
+        const center = midpoint(event.touches);
+        relationView.scale = touchGesture.scale * distance(event.touches) / touchGesture.distance;
+        relationView.x = touchGesture.originX + center.x - touchGesture.center.x;
+        relationView.y = touchGesture.originY + center.y - touchGesture.center.y;
+      } else if (touchGesture.mode === 'pan' && event.touches.length === 1) {
+        event.preventDefault();
+        relationView.x = touchGesture.originX + event.touches[0].clientX - touchGesture.x;
+        relationView.y = touchGesture.originY + event.touches[0].clientY - touchGesture.y;
+      }
+      clampView(); applyRelationView(graph);
+    }, { passive:false });
+    const endTouch = event => {
+      if (event.touches.length === 1 && relationView.scale > 1) {
+        touchGesture = { mode:'pan', x:event.touches[0].clientX, y:event.touches[0].clientY,
+          originX:relationView.x, originY:relationView.y };
+      } else touchGesture = null;
+      if (relationView.scale <= 1) { relationView = { scale:1, x:0, y:0 }; applyRelationView(graph); }
+    };
+    graph.addEventListener('touchend', endTouch, { passive:true });
+    graph.addEventListener('touchcancel', endTouch, { passive:true });
     let drag = null;
     graph.addEventListener('pointerdown', event => {
+      if (event.pointerType === 'touch') return;
       if (relationView.scale <= 1 || event.target.closest('button')) return;
       drag = { id: event.pointerId, x: event.clientX, y: event.clientY, originX: relationView.x, originY: relationView.y };
       graph.setPointerCapture(event.pointerId); graph.classList.add('is-dragging');
     });
     graph.addEventListener('pointermove', event => {
+      if (event.pointerType === 'touch') return;
       if (!drag || drag.id !== event.pointerId) return;
       relationView.x = drag.originX + event.clientX - drag.x;
       relationView.y = drag.originY + event.clientY - drag.y;
@@ -836,7 +932,7 @@
                 <p>${highlightMemorySearch(record.body)}</p>
               </section>
               <section class="memory-reflection-live-face memory-reflection-live-back">
-                <header><small>AGENT · REFLECTION</small><button type="button" data-memory-reflection-flip>返回 <i aria-hidden="true">↻</i></button></header>
+                <header><small>CAIRN · REFLECTION</small><button type="button" data-memory-reflection-flip>返回 <i aria-hidden="true">↻</i></button></header>
                 <h4>这件事后来在我身上变成了什么</h4>
                 <span class="reflection-note"><b>感受</b><span>${escapeHtml(record.reflection.feeling)}</span></span>
                 <span class="reflection-note"><b>想法</b><span>${escapeHtml(record.reflection.thought)}</span></span>
@@ -844,7 +940,7 @@
               </section>
             </div>
           </div>` : record.integrationRole === 'master' && Array.isArray(record.timeline) && record.timeline.length > 1 ? timelineMarkup(record) : `<div class="memory-facet-stage"><div class="memory-facet is-active"><small>记忆正文</small><p>${highlightMemorySearch(record.body)}</p></div></div>`}
-          <dl><div><dt>来源</dt><dd>${escapeHtml(record.source)}</dd></div><div><dt>记录于</dt><dd>${escapeHtml(record.recordedAt)}</dd></div><div><dt>修改于</dt><dd>${escapeHtml(record.modifiedAt)}</dd></div><div><dt>关联</dt><dd>${escapeHtml(record.related)}</dd></div></dl>
+          ${memoryUsageEchoMarkup(record.usageEcho)}
           <div class="memory-card-actions">
             <button class="add-to-workbench" type="button" data-add-to-workbench aria-pressed="false"><span><strong>加入工作台</strong><small>与其他记忆一起整理</small></span><i aria-hidden="true">＋</i></button>
             <button class="inline-clean-trigger" type="button" data-inline-clean-toggle data-guarded-cleanup="${guardedCleanup}" aria-expanded="false"><span><strong>清理这条记忆</strong><small>${guardedCleanup ? '重要内容会再请你确认一次' : '直接移入可恢复回收区'}</small></span><i aria-hidden="true">回收</i></button>
@@ -857,6 +953,16 @@
           </section>
         </div>
       </div>`;
+  }
+
+  function memoryUsageEchoMarkup(summary) {
+    const value = summary || { total: 0, changed_action_count: 0, counts: {}, items: [] };
+    const effectLabels = { helped: '帮到了我', used: '进入了判断', unused: '想起但未采用', misleading: '曾经带偏', outdated: '已经过时' };
+    const sentence = value.total
+      ? `这段经历后来被想起 ${value.total} 次，其中 ${value.changed_action_count || 0} 次真正进入了行动。`
+      : '这段经历还没有留下行动回声。没有结果时，它只安静待在这里。';
+    const rows = (value.items || []).map(item => `<li><i class="is-${escapeHtml(item.effect)}"></i><span><strong>${escapeHtml(item.action)}</strong>${item.result ? `<p>${escapeHtml(item.result)}</p>` : ''}<small>${escapeHtml(effectLabels[item.effect] || item.effect)} · ${escapeHtml(relativeTime(item.occurred_at || item.created_at))}</small></span></li>`).join('');
+    return `<section class="memory-usage-echo"><header><span><small>USE ECHO</small><strong>它怎样影响过我</strong></span><b>${value.total || 0} 次</b></header><p>${escapeHtml(sentence)}</p>${rows ? `<details><summary>查看完整回声时间线</summary><ol>${rows}</ol></details>` : ''}</section>`;
   }
 
   function createMemoryPaper(record) {
@@ -2203,6 +2309,92 @@
   const candidateRelations = new Map();
   let candidateMasterId = '';
   const relationLabels = { duplicate: '重复', supplement: '补充', evolution: '阶段更迭', conflict: '真实冲突', related: '仅相关' };
+  const serviceAreaLabels = { life: '生活', relations: '关系', action: '行动', self: '自我', interest: '兴趣', study: '学习', unclassified: '待分区', work: '行动', mail: '关系', game: '兴趣' };
+  const realAreaDrafts = new Map();
+  let realAreaMemories = [];
+  let realAreaRegistry = [];
+  let realAreaAssignments = {};
+  let realAreaSuggestions = {};
+  let inspectedRealArea = '';
+  async function saveRealArea(body) {
+    const response = await fetch('/api/memory-preview/service-areas', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    });
+    const payload = await response.json();
+    if (!response.ok || !payload.ok) throw new Error(payload.error || `service_area_${response.status}`);
+    return payload.state;
+  }
+  function renderRealAreaMemory() {
+    const select = document.querySelector('[data-real-area-memory]');
+    const host = document.querySelector('[data-real-area-card]');
+    const row = realAreaMemories.find(item => item.id === select?.value) || realAreaMemories[0];
+    if (!row) { host.innerHTML = '<p>没有读到真实记忆；正式记忆没有发生变化。</p>'; return; }
+    const confirmed = realAreaAssignments[row.id]?.areas || [];
+    const suggested = realAreaSuggestions[row.id] || [];
+    const areas = new Set(realAreaDrafts.get(row.id) || (confirmed.length ? confirmed : suggested.map(item => item.area)));
+    const inspected = realAreaRegistry.find(area => area.id === inspectedRealArea) || realAreaRegistry[0];
+    const matched = suggested.find(item => item.area === inspected?.id)?.keywords || [];
+    host.innerHTML = `<article class="real-area-memory-card"><small>${escapeHtml(row.kind || 'event')} · 正式记忆</small><h3>${escapeHtml(row.title)}</h3><p>${escapeHtml(row.preview || '')}</p><div class="real-area-keywords" aria-label="记忆全部关键词">${(row.tags || []).map(tag => `<span>${escapeHtml(tag)}</span>`).join('') || '<span>暂无原关键词</span>'}</div><div class="candidate-service-areas" aria-label="服务区域"><small>${confirmed.length ? '已确认分区' : '关键词建议（尚未确认）'}</small>${realAreaRegistry.map(area => `<button type="button" data-real-area="${escapeHtml(area.id)}" aria-pressed="${areas.has(area.id)}" class="${suggested.some(item => item.area === area.id) ? 'is-suggested' : ''}">${escapeHtml(area.label)}</button>`).join('')}</div><div class="real-area-inspector"><strong>这条记忆在“${escapeHtml(inspected?.label || '分区')}”里的关键词</strong><p>${matched.map(word => `<span>${escapeHtml(word)}</span>`).join('') || '<span>这条记忆没有属于该分区的关键词</span>'}</p></div><button type="button" class="real-area-save" data-save-real-area>确认这条记忆的分区</button><span class="real-area-draft-note">保存只写入旁路索引 · 正式记忆正文、标签、指纹与向量不变</span></article>`;
+    host.querySelectorAll('[data-real-area]').forEach(button => button.addEventListener('click', () => {
+      inspectedRealArea = button.dataset.realArea;
+      const next = new Set(areas); next.has(button.dataset.realArea) ? next.delete(button.dataset.realArea) : next.add(button.dataset.realArea);
+      realAreaDrafts.set(row.id, [...next]); renderRealAreaMemory();
+    }));
+    host.querySelector('[data-save-real-area]')?.addEventListener('click', async event => {
+      event.currentTarget.disabled = true;
+      try {
+        const state = await saveRealArea({ action: 'save_assignment', memory_id: row.id, areas: [...areas], actor: 'human:xiaoran', reason: '在真实记忆分区工作台人工确认' });
+        realAreaAssignments = state.assignments || {}; realAreaDrafts.delete(row.id); renderRealAreaMemory();
+      } catch (error) { event.currentTarget.disabled = false; alert(`分区没有保存：${error.message}`); }
+    });
+  }
+  async function loadRealAreaPreview() {
+    const select = document.querySelector('[data-real-area-memory]');
+    try {
+      const [memoryResponse, areaResponse] = await Promise.all([
+        fetch('/api/memory-preview/library?page=1&limit=1000&state=active', { cache: 'no-store', headers: { Accept: 'application/json' } }),
+        fetch('/api/memory-preview/service-areas', { cache: 'no-store', headers: { Accept: 'application/json' } })
+      ]);
+      const [payload, areaPayload] = await Promise.all([memoryResponse.json(), areaResponse.json()]);
+      if (!memoryResponse.ok || !payload.ok) throw new Error(payload.error || `real_memory_${memoryResponse.status}`);
+      if (!areaResponse.ok || !areaPayload.ok) throw new Error(areaPayload.error || `service_area_${areaResponse.status}`);
+      realAreaMemories = payload.memories || []; realAreaRegistry = areaPayload.registry || [];
+      realAreaAssignments = areaPayload.assignments || {}; realAreaSuggestions = areaPayload.suggestions || {};
+      inspectedRealArea = realAreaRegistry[0]?.id || '';
+      select.innerHTML = realAreaMemories.map(row => `<option value="${escapeHtml(row.id)}">${escapeHtml(row.title)}</option>`).join('');
+      select.onchange = renderRealAreaMemory; renderRealAreaMemory();
+    } catch (error) { select.innerHTML = '<option>读取失败</option>'; document.querySelector('[data-real-area-card]').innerHTML = `<p>分区旁路没有连接：${escapeHtml(error.message)}。正式记忆没有变化。</p>`; }
+  }
+  document.querySelector('[data-real-area-create]')?.addEventListener('submit', async event => {
+    event.preventDefault(); const form = new FormData(event.currentTarget);
+    const label = String(form.get('label') || '').trim();
+    const keywords = String(form.get('keywords') || '').split(/[，,、]/).map(word => word.trim()).filter(Boolean);
+    const id = `custom_${Date.now().toString(36)}`;
+    try {
+      const state = await saveRealArea({ action: 'save_area', id, label, keywords });
+      realAreaRegistry = state.areas || []; event.currentTarget.reset(); await loadRealAreaPreview();
+    } catch (error) { alert(`自定义分区没有保存：${error.message}`); }
+  });
+  const candidateAreaNames = row => new Set((row.service_areas || []).map(item => item.area));
+  const renderAreaChips = (row, editable = false) => {
+    const active = candidateAreaNames(row);
+    return `<div class="candidate-service-areas" aria-label="服务区域"><small>服务区域</small>${Object.entries(serviceAreaLabels).map(([area, label]) => `<button type="button" data-service-area="${area}" aria-pressed="${active.has(area)}" ${editable ? '' : 'disabled'}>${label}</button>`).join('')}</div>`;
+  };
+  async function toggleCandidateArea(row, area, button) {
+    const active = candidateAreaNames(row).has(area);
+    button.disabled = true;
+    try {
+      const response = await fetch(`/moraine-beta/api/candidates/${encodeURIComponent(row.id)}/service-areas`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ add: active ? [] : [area], remove: active ? [area] : [], actor: 'human:xiaoran', reason: active ? '从分记忆服务区域移除' : '加入分记忆服务区域' })
+      });
+      const updated = await response.json();
+      if (!response.ok) throw new Error(updated.error || `service_area_${response.status}`);
+      Object.assign(row, updated);
+      if (candidateWorkset.has(row.id)) candidateWorkset.set(row.id, row);
+      renderCandidate(); renderCandidateWorkset();
+    } catch (error) { button.disabled = false; alert(`区域没有改变：${error.message}`); }
+  }
   function renderCandidateWorkset() {
     const container = document.querySelector('[data-candidate-workset]');
     const rows = [...candidateWorkset.values()];
@@ -2216,7 +2408,7 @@
     if (!rows.length) { container.innerHTML = '<p>先从上方候选卡加入至少两条。</p>'; return; }
     container.innerHTML = `${!candidateMasterId && rows.length >= 2 ? '<p>这些都是关系／身份候选，需要走专门归位复核；普通合并预览必须有一条可承载的事件、项目、决定、偏好或反思候选。</p>' : ''}${rows.map(row => `<article data-candidate-workset-id="${escapeHtml(row.id)}">
       <label class="candidate-master-choice"><input type="radio" name="candidate-master" value="${escapeHtml(row.id)}" ${row.id === candidateMasterId ? 'checked' : ''} ${['identity', 'relationship'].includes(row.kind) ? 'disabled' : ''}><span><small>${row.id === candidateMasterId ? '主候选' : ['identity', 'relationship'].includes(row.kind) ? '受保护来源 · 不可作承载候选' : '候选成员'}</small><strong>${escapeHtml(row.title)}</strong></span></label>
-      <label>关系<select data-candidate-relation ${row.id === candidateMasterId ? 'disabled' : ''}>${Object.entries(relationLabels).map(([value,label]) => `<option value="${value}" ${candidateRelations.get(row.id) === value || (!candidateRelations.has(row.id) && value === 'supplement') ? 'selected' : ''}>${label}</option>`).join('')}</select></label>
+      ${renderAreaChips(row)}<label>关系<select data-candidate-relation ${row.id === candidateMasterId ? 'disabled' : ''}>${Object.entries(relationLabels).map(([value,label]) => `<option value="${value}" ${candidateRelations.get(row.id) === value || (!candidateRelations.has(row.id) && value === 'supplement') ? 'selected' : ''}>${label}</option>`).join('')}</select></label>
       <button type="button" data-remove-workset-candidate>移出</button>
     </article>`).join('')}`;
     container.querySelectorAll('input[name="candidate-master"]').forEach(input => input.addEventListener('change', () => { candidateMasterId = input.value; renderCandidateWorkset(); }));
@@ -2296,6 +2488,30 @@
       return before + hit;
     }).join('') + escapeHtml(raw.slice(cursor));
   }
+  const structureActionWords = ['新增','加入','建立','接入','部署','发布','完成','修复','修改','升级','恢复','确认','决定','选择','拒绝','停止','开始','回复','发送','整合','拆分','归档','召回','认识','讨论','测试','验收'];
+  const structureStateWords = ['完成','运行正常','已上线','已部署','已发布','已恢复','已确认','当前','持续','等待','暂停','关闭','失败','异常','未完成','尚未','不再','保留','独立','私密','公开'];
+  function normalizedCandidateDate(value) {
+    const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return match ? `${match[1]}-${match[2]}-${match[3]}` : '';
+  }
+  function candidateStructuredKeywords(row) {
+    const text = `${row.title || ''}\n${row.content || ''}`;
+    const unique = values => [...new Set(values.map(value => String(value || '').trim()).filter(Boolean))].slice(0, 8);
+    const actions = unique(structureActionWords.filter(word => text.includes(word)));
+    const states = unique(structureStateWords.filter(word => text.includes(word)));
+    const blocked = new Set([...actions, ...states, '事件', '项目', '决定', '偏好', '反思', '关系']);
+    const entities = unique((row.tags || []).filter(tag => !blocked.has(String(tag)) && text.includes(String(tag))));
+    const date = normalizedCandidateDate(row.occurred_at || row.created_at);
+    return { entities, actions, states, dates: date ? [date] : [] };
+  }
+  function structuredKeywordStrip(row) {
+    const groups = row.structured_keywords || candidateStructuredKeywords(row);
+    const entityTypes = { object: '对象', person: '人物', named_work: '专名', identifier: '标识符', project_or_identifier: '项目/标识', named_tag: '标签专名' };
+    const entityDetails = groups.entity_details || (groups.entities || []).map(term => ({ term }));
+    const entityHtml = entityDetails.map(item => `<span title="${escapeHtml(`${entityTypes[item.type] || '实体'} · ${item.source || '兼容结果'}`)}">${escapeHtml(item.term)}${item.type ? `<small>${escapeHtml(entityTypes[item.type] || item.type)}</small>` : ''}</span>`).join('') || '<i>暂未提取</i>';
+    const rows = [['动作', groups.actions], ['状态', groups.states], ['时间', groups.dates]];
+    return `<section class="candidate-structured-keywords" aria-label="原文结构关键词"><header><strong>原文粗提取</strong><small>影子结果 · 不写回记忆</small></header><div><b>实体</b><p>${entityHtml}</p></div>${rows.map(([label, values]) => `<div><b>${label}</b><p>${values.map(value => `<span>${escapeHtml(value)}</span>`).join('') || '<i>暂未提取</i>'}</p></div>`).join('')}<footer>实体会显示类型与证据来源；普通小写英文不会自动当作专名。动作与状态来自透明词表，时间保留原文表达与标准事件日期。</footer></section>`;
+  }
   function renderCandidate() {
     const card = document.querySelector('[data-candidate-card]');
     const position = document.querySelector('[data-candidate-position]');
@@ -2313,8 +2529,9 @@
     const eventSuggestions = row.event_match_suggestions || [];
     const eventStrip = eventSuggestions.length ? `<section class="candidate-event-suggestions"><header><strong>可能属于同一事件</strong><small>仅供检查</small></header>${eventSuggestions.map(item => `<article><b>${escapeHtml(item.title || item.candidate_id)}</b><span>${escapeHtml((item.evidence?.shared_keywords || []).join('、') || '无共同词')} · 相隔 ${Number(item.evidence?.time_gap_minutes || 0)} 分钟</span><small>${item.blockers?.length ? `已阻断：${escapeHtml(item.blockers.join('、'))}` : '对象与动作连续性尚未确认'}</small></article>`).join('')}<footer>不会自动合篮；确认后仍保留来源与拆回能力。</footer></section>` : '';
     position.textContent = `${candidateIndex + 1} / ${candidateRows.length}`;
-    card.innerHTML = `<article class="candidate-paper"><div class="candidate-meta"><span>${escapeHtml(lane)}</span><span>${escapeHtml(relativeTime(row.occurred_at))}</span><span>${escapeHtml(row.kind || 'event')}</span></div><h3>${highlightCandidateKeywords(row.title, keywordEvidence, 'title')}</h3><p>${highlightCandidateKeywords(row.content, keywordEvidence, 'content')}</p>${keywordStrip}${eventStrip}${row.tags?.length ? `<div class="candidate-tags">${row.tags.map(tag => `<span>${escapeHtml(tag)}</span>`).join('')}</div>` : ''}<button class="candidate-add-workset" type="button" data-add-current-candidate ${candidateWorkset.has(row.id) ? 'disabled' : ''}>${candidateWorkset.has(row.id) ? '已加入工作集' : '加入候选工作集'}</button><section class="candidate-neighbors"><header><strong>本地语义模型找到的线索</strong><small>关系仍未判断</small></header>${neighborList.length ? neighborList.map(item => `<div><span><b>${escapeHtml(item.title || item.id)}</b><small>${item.origin}</small></span><strong>${Math.round(Number(item.similarity || 0) * 100)}%</strong></div>`).join('') : '<p>目前没有超过门槛的相似线索。</p>'}</section></article>`;
+    card.innerHTML = `<article class="candidate-paper"><div class="candidate-meta"><span>${escapeHtml(lane)}</span><span>${escapeHtml(relativeTime(row.occurred_at))}</span><span>${escapeHtml(row.kind || 'event')}</span></div><h3>${highlightCandidateKeywords(row.title, keywordEvidence, 'title')}</h3><p>${highlightCandidateKeywords(row.content, keywordEvidence, 'content')}</p>${renderAreaChips(row, true)}${keywordStrip}${structuredKeywordStrip(row)}${eventStrip}${row.tags?.length ? `<div class="candidate-tags">${row.tags.map(tag => `<span>${escapeHtml(tag)}</span>`).join('')}</div>` : ''}<button class="candidate-add-workset" type="button" data-add-current-candidate ${candidateWorkset.has(row.id) ? 'disabled' : ''}>${candidateWorkset.has(row.id) ? '已加入工作集' : '加入候选工作集'}</button><section class="candidate-neighbors"><header><strong>本地语义模型找到的线索</strong><small>关系仍未判断</small></header>${neighborList.length ? neighborList.map(item => `<div><span><b>${escapeHtml(item.title || item.id)}</b><small>${item.origin}</small></span><strong>${Math.round(Number(item.similarity || 0) * 100)}%</strong></div>`).join('') : '<p>目前没有超过门槛的相似线索。</p>'}</section></article>`;
     card.querySelector('[data-add-current-candidate]')?.addEventListener('click', () => { addCandidateToWorkset(row); renderCandidate(); });
+    card.querySelectorAll('[data-service-area]').forEach(button => button.addEventListener('click', () => toggleCandidateArea(row, button.dataset.serviceArea, button)));
   }
   function renderCandidateShred(payload) {
     const policy = payload.shred_policy || {};
@@ -2544,6 +2761,7 @@
     saveJevSettings({ clear_api_key: true }, [event.currentTarget]);
   });
   loadJevSettings();
+  loadRealAreaPreview();
   async function loadCandidates() {
     try {
       const response = await fetch('/moraine-beta/api/dwell-v2/candidates', { cache: 'no-store' });
@@ -2631,7 +2849,7 @@
       const response = await fetch('/moraine-beta/api/dwell-v2/actions/preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'candidate_merge', actor: 'xiaoran', reason: document.querySelector('[data-candidate-workbench-reason]').value, candidate_ids: rows.map(row => row.id), master_id: candidateMasterId, member_relations: memberRelations }) });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || `preview_${response.status}`);
-      preview.innerHTML = `<header><small>正式入库前预览</small><strong>${escapeHtml(payload.result_preview.title)}</strong></header><p>${escapeHtml(payload.result_preview.content)}</p><ul>${payload.member_relations.map(item => `<li><b>${escapeHtml(candidateWorkset.get(item.id)?.title || item.id)}</b><span>${escapeHtml(item.relation === 'master' ? '承载候选' : relationLabels[item.relation] || item.relation)} · ${escapeHtml(item.disposition === 'reference_active' ? '保持独立' : '确认后退出候选')}</span></li>`).join('')}</ul><div class="candidate-execute"><label>输入确认码 <b>${escapeHtml(payload.confirmation_code)}</b><input inputmode="numeric" maxlength="6" data-candidate-confirm-code placeholder="六位确认码"></label><button type="button" data-execute-candidate-workset>确认整合并正式入库</button><small data-candidate-execute-result>尚未写入；草稿十分钟内有效。</small></div>`;
+      preview.innerHTML = `<header><small>正式入库前预览</small><strong>${escapeHtml(payload.result_preview.title)}</strong></header><p>${escapeHtml(payload.result_preview.content)}</p><ul>${payload.member_relations.map(item => { const member = candidateWorkset.get(item.id); return `<li><b>${escapeHtml(member?.title || item.id)}</b>${member ? renderAreaChips(member) : ''}<span>${escapeHtml(item.relation === 'master' ? '承载候选' : relationLabels[item.relation] || item.relation)} · ${escapeHtml(item.disposition === 'reference_active' ? '保持独立' : '确认后退出候选')}</span></li>`; }).join('')}</ul><div class="candidate-execute"><label>输入确认码 <b>${escapeHtml(payload.confirmation_code)}</b><input inputmode="numeric" maxlength="6" data-candidate-confirm-code placeholder="六位确认码"></label><button type="button" data-execute-candidate-workset>确认整合并正式入库</button><small data-candidate-execute-result>尚未写入；草稿十分钟内有效。</small></div>`;
       preview.querySelector('[data-execute-candidate-workset]')?.addEventListener('click', async executeEvent => {
         const executeButton = executeEvent.currentTarget;
         const result = preview.querySelector('[data-candidate-execute-result]');
@@ -2722,6 +2940,14 @@
   function showView(view) {
     const next = ['cairn', 'calendar', 'candidates', 'library', 'archive', 'workbench', 'activity', 'settings'].includes(view) ? view : 'overview';
     prototype.dataset.view = next;
+    try {
+      localStorage.setItem('moraine.activeView', next);
+      const url = new URL(window.location.href);
+      url.searchParams.set('view', next);
+      window.history.replaceState({ ...(window.history.state || {}), view: next }, '', url);
+    } catch (_) {
+      // The visible page still changes if storage or history is unavailable.
+    }
     document.querySelectorAll('[data-view]').forEach((button) => {
       button.classList.toggle('is-current', button.dataset.view === next);
     });
@@ -2985,6 +3211,7 @@
             record.body = memory.content || '';
             record.timeline = Array.isArray(memory.timeline) ? memory.timeline : null;
             record.integrationSummary = memory.integration_summary || record.summary;
+            record.usageEcho = memory.usage_echo || null;
             const detail = paper.querySelector('.memory-paper-detail');
             detail.outerHTML = memoryDetailMarkup(record);
             wireTimeline();
@@ -3635,7 +3862,7 @@
   residentCardFlip?.addEventListener('click', () => {
     const flipped = residentCardFlip.getAttribute('aria-pressed') !== 'true';
     residentCardFlip.setAttribute('aria-pressed', String(flipped));
-    residentCardFlip.setAttribute('aria-label', flipped ? '翻回 Agent 数字居民证' : '翻到用户画像');
+    residentCardFlip.setAttribute('aria-label', flipped ? '翻回 Agent 身份卡' : '翻到用户画像');
     residentCard?.classList.toggle('is-flipped', flipped);
     const front = residentCard?.querySelector('.resident-card-front');
     const back = residentCard?.querySelector('.resident-card-back');
@@ -3657,8 +3884,23 @@
     else if (event.key === 'Escape') closeSidebar();
   });
 
+  activityTabs.forEach(tab => tab.addEventListener('click', () => {
+    activityTabs.forEach(item => item.setAttribute('aria-selected', item === tab ? 'true' : 'false'));
+    moveActivityPill(tab, true);
+    activeActivityMetric = tab.dataset.activityMetric;
+    selectedActivityDay = null;
+    const meta = activityMeta[activeActivityMetric];
+    document.querySelector('[data-memory-activity]')?.style.setProperty('--activity-color', meta.color);
+    document.querySelector('[data-activity-legend]').textContent = meta.legend;
+    renderActivityGrid();
+    renderActivitySummary();
+  }));
+
   const initialParams = new URLSearchParams(window.location.search);
-  showView(initialParams.get('view') || 'overview');
+  let restoredView = 'overview';
+  try { restoredView = initialParams.get('view') || localStorage.getItem('moraine.activeView') || 'overview'; }
+  catch (_) { restoredView = initialParams.get('view') || 'overview'; }
+  showView(restoredView);
   const initialWorkbenchStep = initialParams.get('workbench');
   if (initialWorkbenchStep) {
     workbenchTabs.find((tab) => tab.dataset.workbenchStep === initialWorkbenchStep)?.click();
@@ -3670,6 +3912,7 @@
   requestAnimationFrame(() => moveArrangementPill(arrangementButtons[0], false));
   requestAnimationFrame(() => moveWorkbenchPill(workbenchTabs[0], false));
   requestAnimationFrame(() => moveOwnershipPill(ownershipTabs[0], false));
+  requestAnimationFrame(() => moveActivityPill(activityTabs[0], false));
   window.addEventListener('resize', () => {
     const active = arrangementButtons.find((button) => button.getAttribute('aria-selected') === 'true') || arrangementButtons[0];
     moveArrangementPill(active, false);
@@ -3677,5 +3920,7 @@
     moveWorkbenchPill(activeWorkbench, false);
     const activeOwnership = ownershipTabs.find((button) => button.getAttribute('aria-selected') === 'true') || ownershipTabs[0];
     moveOwnershipPill(activeOwnership, false);
+    const activeActivity = activityTabs.find((button) => button.getAttribute('aria-selected') === 'true') || activityTabs[0];
+    moveActivityPill(activeActivity, false);
   });
 })();
