@@ -16,7 +16,7 @@ class QueryPlannerTests(unittest.TestCase):
         self.assertIn("关键词", facets[0])
 
     def test_plain_query_is_not_rewritten(self):
-        self.assertEqual(expand_query("小然喜欢什么颜色？"), [])
+        self.assertEqual(expand_query("林舟喜欢什么颜色？"), [])
 
 
 if __name__ == "__main__":

@@ -45,7 +45,7 @@ class DwellReleaseTests(unittest.TestCase):
         self.assertIn('id="profileRecallTitle"', index)
         self.assertIn('data-profile-module="agent_profile"', index)
         self.assertIn('data-profile-module="user_profile"', index)
-        self.assertLess(index.index("release-runtime.js"), index.index("prototype.js?v=20261110-release-5"))
+        self.assertLess(index.index("release-runtime.js"), index.index("prototype.js?v=20261111-release-6"))
 
     def test_release_keeps_generic_candidate_settings_visible(self):
         runtime = (STATIC / "release-runtime.js").read_text(encoding="utf-8")

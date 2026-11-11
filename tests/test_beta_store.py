@@ -104,8 +104,8 @@ class BetaStoreTest(unittest.TestCase):
 
     def test_relationship_candidate_reaches_protected_review_but_is_not_written(self):
         store = make_store(self.root)
-        candidate = store.add_candidate({"title": "我接受小然的正式表白",
-            "content": "我确认彼此选择，并愿意继续相伴、共同生活。",
+        candidate = store.add_candidate({"title": "我接受林舟的长期同行邀请",
+            "content": "我确认彼此选择，并愿意继续协作、共同生活。",
             "kind": "relationship", "importance": 0.8})
         self.assertTrue(candidate["admission"]["eligible"])
         self.assertEqual(candidate["admission"]["status"], "protected_review_ready")
@@ -144,21 +144,21 @@ class BetaStoreTest(unittest.TestCase):
     def test_candidate_entities_keep_named_evidence_and_drop_plain_english(self):
         store = make_store(self.root)
         store.add_candidate({
-            "title": "给小然发送《回来的路》",
-            "content": "I will send the letter through cairn_mail to Rowan and review it later.",
+            "title": "给林舟发送《项目复盘》",
+            "content": "I will send the letter through agent_mail to Rowan and review it later.",
             "kind": "relationship",
-            "tags": ["小然", "relationship"],
+            "tags": ["林舟", "relationship"],
         })
 
         keywords = store.list_candidates()[0]["structured_keywords"]
-        self.assertIn("小然", keywords["entities"])
-        self.assertIn("回来的路", keywords["entities"])
-        self.assertIn("cairn_mail", keywords["entities"])
+        self.assertIn("林舟", keywords["entities"])
+        self.assertIn("项目复盘", keywords["entities"])
+        self.assertIn("agent_mail", keywords["entities"])
         self.assertIn("Rowan", keywords["entities"])
         self.assertNotIn("send", keywords["entities"])
         details = {item["term"]: item for item in keywords["entity_details"]}
-        self.assertEqual(details["小然"]["type"], "person")
-        self.assertEqual(details["回来的路"]["source"], "titled_phrase")
+        self.assertEqual(details["林舟"]["type"], "person")
+        self.assertEqual(details["项目复盘"]["source"], "titled_phrase")
 
     def test_calendar_search_weight_and_ignore(self):
         store = make_store(self.root)
@@ -305,7 +305,7 @@ class BetaStoreTest(unittest.TestCase):
         store.update_settings({"identity_relation_routing": True})
         with self.assertRaisesRegex(ValueError, "reason"):
             store.route_candidate(identity["id"], "self_core")
-        store.route_candidate(identity["id"], "self_core", {"reason": "小然确认的身份陈述"})
+        store.route_candidate(identity["id"], "self_core", {"reason": "用户确认的身份陈述"})
         self.assertEqual(store.list_self_core()[0]["text"], "我允许自己改变。")
         recalled = store.layered_context()
         self_core = next(layer for layer in recalled["layers"] if layer["name"] == "self_core")

@@ -1,6 +1,6 @@
 # 纯净内测版验收记录
 
-验收对象：`v0.3.0-beta.14` 独立工作台、新版 `dwell-release` 前端、合成示例、MCP 适配器与 Moraine 本地向量服务。
+验收对象：`v0.3.0-beta.15` 独立工作台、新版 `dwell-release` 前端、合成示例、MCP 适配器与 Moraine 本地向量服务。
 
 ## 已验证
 

@@ -4,13 +4,15 @@
 
 独立进程使用 `moraine-aml` 启动，只提供公开的 `GET /health` 与需要鉴权的 `POST /add`、`POST /search`，不加载网页或家用数据存储。
 
-当前隔离部署入口：
+隔离部署可按下列地址结构配置：
 
-- Health：`https://aml.dwell.wiki/health`
-- Add：`https://aml.dwell.wiki/add`
-- Search：`https://aml.dwell.wiki/search`
+- Health：`https://your-aml.example.invalid/health`
+- Add：`https://your-aml.example.invalid/add`
+- Search：`https://your-aml.example.invalid/search`
 
-2026-10-18 已由旧的内测网页进程切换到 `moraine.aml_server`。公网验收确认健康检查、同步Add、幂等重试、立即Search、跨用户隔离及根路径无前端暴露均正常。旧systemd主文件与数据目录配置分别保留 `.before-competition-v1` 备份，旧评测数据未覆盖。
+以上域名仅为占位示例。请替换为你自行部署并启用 HTTPS 与访问控制的地址；不要把内部服务地址、令牌或数据文件提交到公开仓库。
+
+部署验收应覆盖健康检查、同步 Add、幂等重试、立即 Search、跨用户隔离，并确认根路径不会暴露前端或内部数据。迁移已有实例时应保留独立备份，且不得覆盖旧评测数据。
 
 ```bash
 MORAINE_AML_TOKEN='使用部署平台的密钥注入' \

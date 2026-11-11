@@ -86,7 +86,7 @@ class GovernanceTests(unittest.TestCase):
                                             now="t1", expected_version="v1")
         self.assertEqual(proposal["status"], "pending_review")
         self.assertEqual(set(proposal["signatures"]), {"machine"})
-        approved = review_strength_proposal(proposal, actor="xiaoran", actor_role="human",
+        approved = review_strength_proposal(proposal, actor="user", actor_role="human",
                                             decision="approve", now="t2")
         self.assertEqual(approved["status"], "ready")
         self.assertEqual(set(approved["signatures"]), {"machine", "human"})
@@ -103,7 +103,7 @@ class GovernanceTests(unittest.TestCase):
         memory = {"id": "a", "importance": 0.7, "content": "private"}
         proposal = create_strength_proposal(memory, 90, lock=True, actor="cairn", actor_role="machine",
                                             reason="important", now="t1", expected_version="v1")
-        proposal = review_strength_proposal(proposal, actor="xiaoran", actor_role="human",
+        proposal = review_strength_proposal(proposal, actor="user", actor_role="human",
                                             decision="approve", now="t2")
         with self.assertRaisesRegex(ValueError, "version changed"):
             apply_strength_proposal(memory, proposal, current_version="v2", now="t3")
@@ -114,7 +114,7 @@ class GovernanceTests(unittest.TestCase):
 
     def test_returned_proposal_cannot_apply(self):
         proposal = create_strength_proposal({"id": "a", "importance": 0.7}, 20,
-                                            actor="xiaoran", actor_role="human", reason="reconsider",
+                                            actor="user", actor_role="human", reason="reconsider",
                                             now="t1", expected_version="v1")
         proposal = review_strength_proposal(proposal, actor="cairn", actor_role="machine",
                                             decision="return", now="t2")

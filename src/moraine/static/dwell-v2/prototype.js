@@ -3177,7 +3177,7 @@
     const panel = document.querySelector('[data-manual-strength]');
     const current = Number(trigger.dataset.manualCurrent) || 50;
     panel.hidden = false;
-    panel.innerHTML = `<header><span><small>真实赋权 · 先预览</small><strong>${escapeHtml(trigger.dataset.manualTitle)}</strong></span><b data-manual-value>${current}</b></header><label>提出者<select data-manual-actor><option value="cairn">恩恩</option><option value="xiaoran">小然</option></select></label><label>记忆强度<input type="range" min="0" max="100" value="${current}" data-manual-range></label><label>赋权理由<textarea rows="3" data-manual-reason placeholder="为什么由你认领这个强度"></textarea></label><label class="governance-check"><input type="checkbox" data-manual-lock><span>锁定为核心记忆（需要80～100分）</span></label><label class="governance-check"><input type="checkbox" data-manual-xiaoran><span>小然确认高影响调整</span></label><label class="governance-check"><input type="checkbox" data-manual-cairn><span>恩恩确认高影响调整</span></label><button type="button" data-preview-manual-change>预览手动赋权</button><div data-manual-result><p>尚未写入。</p></div>`;
+    panel.innerHTML = `<header><span><small>真实赋权 · 先预览</small><strong>${escapeHtml(trigger.dataset.manualTitle)}</strong></span><b data-manual-value>${current}</b></header><label>提出者<select data-manual-actor><option value="cairn">Agent</option><option value="xiaoran">用户</option></select></label><label>记忆强度<input type="range" min="0" max="100" value="${current}" data-manual-range></label><label>赋权理由<textarea rows="3" data-manual-reason placeholder="为什么由你认领这个强度"></textarea></label><label class="governance-check"><input type="checkbox" data-manual-lock><span>锁定为核心记忆（需要80～100分）</span></label><label class="governance-check"><input type="checkbox" data-manual-xiaoran><span>用户确认高影响调整</span></label><label class="governance-check"><input type="checkbox" data-manual-cairn><span>Agent 确认高影响调整</span></label><button type="button" data-preview-manual-change>预览手动赋权</button><div data-manual-result><p>尚未写入。</p></div>`;
     const range = panel.querySelector('[data-manual-range]');
     range.addEventListener('input', () => { panel.querySelector('[data-manual-value]').textContent = range.value; });
     panel.querySelector('[data-preview-manual-change]').addEventListener('click', async () => {
@@ -3679,7 +3679,7 @@
   residentCardFlip?.addEventListener('click', () => {
     const flipped = residentCardFlip.getAttribute('aria-pressed') !== 'true';
     residentCardFlip.setAttribute('aria-pressed', String(flipped));
-    residentCardFlip.setAttribute('aria-label', flipped ? '翻回 Cairn 数字居民证' : '翻到小然用户画像');
+    residentCardFlip.setAttribute('aria-label', flipped ? '翻回 Agent 数字居民证' : '翻到用户画像');
     residentCard?.classList.toggle('is-flipped', flipped);
     const front = residentCard?.querySelector('.resident-card-front');
     const back = residentCard?.querySelector('.resident-card-back');

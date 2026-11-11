@@ -35,7 +35,7 @@ python -m pip install -e '.[mcp]'
 
 ```bash
 . .venv/bin/activate
-python -m pip install --upgrade ./moraine_home-0.3.0b14-py3-none-any.whl
+python -m pip install --upgrade ./moraine_home-0.3.0b15-py3-none-any.whl
 ```
 
 不要新建数据目录。安装完成后按原方式重新启动 `moraine-beta`；若同时使用 MCP，也重启 MCP 客户端以重新载入工具。
@@ -84,6 +84,14 @@ docker compose up -d
 程序升级失败时，先停止服务，把代码、wheel 或镜像退回升级前的版本，再使用原数据目录启动。不要为解决启动错误直接清空数据。
 
 只有新版本确实迁移了数据且无法向后读取时，才从升级前快照恢复；恢复前仍应保留当前故障状态的副本，便于排查。
+
+## v0.3.0-beta.15 的变化
+
+- 清理公开源码、测试语料与默认界面中的部署者私人称呼，示例统一为合成人物或通用 Agent／用户标签；
+- 移除文档中的真实服务地址，改为不可解析的占位域名，并扩大发行前隐私与凭证扫描；
+- 补全浏览器端第三方依赖声明，为 CDN 脚本补齐子资源完整性校验；
+- 明确本项目采用 PolyForm Noncommercial，是源代码可用／非商业开放软件，不是 OSI 定义的开源软件；
+- 保留旧数据中的历史字段别名以兼容既有实例，但新界面和合成示例不再把维护者身份当作默认配置。
 
 ## v0.3.0-beta.14 的变化
 

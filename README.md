@@ -2,7 +2,7 @@
 
 > The sanitized standalone beta is available in-tree. See the [standalone beta guide](docs/beta-standalone.md); it uses synthetic examples and relative data paths, never our private production instance.
 
-Current prerelease: `v0.3.0-beta.14`. Chinese first-time testers can follow the [ten-minute first-run guide](docs/first-run.zh-CN.md); existing installations can use the [safe upgrade guide](docs/upgrade.zh-CN.md).
+Current prerelease: `v0.3.0-beta.15`. Chinese first-time testers can follow the [ten-minute first-run guide](docs/first-run.zh-CN.md); existing installations can use the [safe upgrade guide](docs/upgrade.zh-CN.md).
 
 <p align="center">
   <img src="assets/moraine-stone.png" width="220" alt="Moraine stone mark with layered mineral veins">
@@ -111,7 +111,7 @@ See [`docs/integration.md`](docs/integration.md) for data shapes, APIs, security
 
 ## Data and privacy
 
-- This repository contains synthetic examples only. It contains no private memories, relationship data, credentials, production paths, or real indexes from Cairn and Xiaoran.
+- This repository contains synthetic examples only. It contains no private memories, relationship data, credentials, production paths, or real indexes from the maintainers' deployments.
 - `data/index.json`, exports, and snapshots may reveal source text and must not be committed to Git.
 - The service binds to loopback by default. External exposure requires authentication and a trusted proxy.
 - Bug reports should use synthetic data or remove names, account details, source IDs, secrets, and re-identifying information.
@@ -125,7 +125,7 @@ Copies, modifications, and redistribution must retain the complete license, repo
 
 `Cairn × Xiaoran · Moraine`
 
-Third-party components and models remain under their own licenses. This is noncommercial source-available software, not Open Source under the OSI definition. See [`LICENSE`](LICENSE) for the complete terms.
+Third-party components and models remain under their own licenses. This is noncommercial source-available software, not Open Source under the OSI definition. See [`LICENSE`](LICENSE), [`NOTICE.md`](NOTICE.md), and the [public-release privacy audit](docs/privacy-release-audit.zh-CN.md).
 
 This license change applies to this revision and later versions. Historical commits already released under MIT retain the rights granted with those revisions; the new license does not revoke them retroactively.
 

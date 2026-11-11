@@ -5,9 +5,16 @@ project_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$project_dir"
 
 if grep -RniE --binary-files=without-match --exclude='*.pyc' --exclude-dir='__pycache__' \
-  '/var/lib/dwell|/etc/dwell|agent\.qq\.com|w130297|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|sk-[A-Za-z0-9_-]{20,}' \
+  '/var/lib/dwell|/etc/dwell|aml\.dwell\.wiki|agent\.qq\.com|w130297|cairnenen|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|sk-[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9_]{20,}|[0-9]{8,10}:[A-Za-z0-9_-]{30,}|AKIA[0-9A-Z]{16}' \
   src examples deploy docs tests README.md README.zh-CN.md .env.example Dockerfile compose.yaml NOTICE.md; then
   echo "release check failed: private path, address, or credential-like text found" >&2
+  exit 1
+fi
+
+if grep -RniE --binary-files=without-match --exclude='*.pyc' --exclude-dir='__pycache__' \
+  '我接受小然|给小然发送|小然确认|翻到小然|>恩恩<|>小然<' \
+  src examples deploy docs tests README.md README.zh-CN.md .env.example Dockerfile compose.yaml NOTICE.md; then
+  echo "release check failed: maintainer-specific sample or default label found" >&2
   exit 1
 fi
 

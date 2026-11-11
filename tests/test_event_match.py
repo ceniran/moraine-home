@@ -39,8 +39,8 @@ class EventMatchTests(unittest.TestCase):
 
     def test_protected_kinds_always_require_review(self):
         rows = [
-            self.row("a", "2026-09-27T10:00:00Z", objects=["xiaoran"], actions=["confirm"], kind="relationship"),
-            self.row("b", "2026-09-27T10:05:00Z", objects=["xiaoran"], actions=["confirm"]),
+            self.row("a", "2026-09-27T10:00:00Z", objects=["user-a"], actions=["confirm"], kind="relationship"),
+            self.row("b", "2026-09-27T10:05:00Z", objects=["user-a"], actions=["confirm"]),
         ]
         result = propose_event_matches(rows)
         self.assertIn("protected_kind_requires_review", result[0]["blockers"])

@@ -2,7 +2,7 @@
 
 > 纯净内测工作台已经可以独立运行：参见 [独立版启动说明](docs/beta-standalone.zh-CN.md)。第一次让小机入住时，可把 [给小机的 Moraine 使用说明](docs/agent-guide.zh-CN.md) 交给它阅读。纯净版只使用合成示例和相对数据目录，不读取我们的私人生产实例。
 
-第一次安装请直接照着[十分钟首次使用](docs/first-run.zh-CN.md)操作；已有实例请按[安全升级说明](docs/upgrade.zh-CN.md)更新。当前内测版本为 `v0.3.0-beta.14`。
+第一次安装请直接照着[十分钟首次使用](docs/first-run.zh-CN.md)操作；已有实例请按[安全升级说明](docs/upgrade.zh-CN.md)更新。当前内测版本为 `v0.3.0-beta.15`。
 
 <p align="center">
   <img src="assets/moraine-stone.png" width="220" alt="带有层状石脉的 Moraine 小石头标记">
@@ -116,7 +116,7 @@ curl http://127.0.0.1:4790/api/health
 
 ## 数据与隐私
 
-- 本仓库只包含合成示例，不包含 Cairn 与 Xiaoran 的私人记忆、关系数据、凭证、生产路径或真实索引；
+- 本仓库只包含合成示例，不包含维护者部署中的私人记忆、关系数据、凭证、生产路径或真实索引；
 - `data/index.json`、导出包和快照都可能泄露原始文本信息，不应提交到 Git；
 - 服务默认只监听本机；如果需要对外暴露，必须加鉴权和可信代理；
 - 提交问题时请使用合成数据，或先删除姓名、账号、来源 ID、密钥和可重新识别个人的信息；
@@ -130,6 +130,8 @@ Moraine 以 **PolyForm Noncommercial License 1.0.0** 非商业开放：允许个
 `Cairn × Xiaoran · Moraine`
 
 第三方组件与模型继续遵循各自许可证。本项目是“源代码可用／非商业开放”，不是 OSI 定义下的开源软件。完整条款见 [`LICENSE`](LICENSE)。
+
+公开发行前的隐私边界与可重复检查见[公开发行隐私检查](docs/privacy-release-audit.zh-CN.md)。
 
 许可证变更只适用于本次变更及其后的版本；已经按 MIT 发布的历史提交继续保有当时授予的权利，新的许可证不会追溯撤销它们。
 

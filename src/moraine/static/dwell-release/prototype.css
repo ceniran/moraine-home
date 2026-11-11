@@ -4468,7 +4468,7 @@ body.has-backend-revision { overflow:hidden; }
   .workbench .draft-form .integration-memory-pane { padding: 14px 12px 13px; }
 }
 
-/* Xiaoran's workbench flow: title selection, plain draft, candidate-style revision. */
+/* Workbench flow: title selection, plain draft, candidate-style revision. */
 .workbench .preline-timeline-rail { cursor: default; }
 .workbench .preline-timeline-rail:hover .timeline-stepper-node {
   border-color: #7893a2;
