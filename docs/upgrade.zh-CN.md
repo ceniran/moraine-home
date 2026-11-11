@@ -35,7 +35,7 @@ python -m pip install -e '.[mcp]'
 
 ```bash
 . .venv/bin/activate
-python -m pip install --upgrade ./moraine_home-0.3.0b16-py3-none-any.whl
+python -m pip install --upgrade ./moraine_home-0.3.0b17-py3-none-any.whl
 ```
 
 不要新建数据目录。安装完成后按原方式重新启动 `moraine-beta`；若同时使用 MCP，也重启 MCP 客户端以重新载入工具。
@@ -84,6 +84,14 @@ docker compose up -d
 程序升级失败时，先停止服务，把代码、wheel 或镜像退回升级前的版本，再使用原数据目录启动。不要为解决启动错误直接清空数据。
 
 只有新版本确实迁移了数据且无法向后读取时，才从升级前快照恢复；恢复前仍应保留当前故障状态的副本，便于排查。
+
+## v0.3.0-beta.17 的变化
+
+- 新增通用聊天宿主桥：`/api/host/turn/prepare` 在回复前构造有预算、有来源的召回上下文，`/api/host/turn/commit` 在回复后处理显式记忆标记并返回可见正文；
+- MCP 新增 `conversation_prepare` 与 `conversation_commit`，Telegram 等宿主无需自行重复实现解析和写入协议；
+- 单轮支持零到八条记忆，候选与小机自主直入可以并存；单条格式或写入失败不会阻断其他记忆及普通回复；
+- 本地关键词降级增加中文长句片段匹配，语义服务不可用时也能处理常见承接式表达；
+- 私人身份、日记、书房、唤醒调度和主动消息仍不进入通用发行核心。
 
 ## v0.3.0-beta.16 的变化
 

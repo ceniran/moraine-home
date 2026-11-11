@@ -145,6 +145,27 @@ def create_mcp(client: MoraineClient) -> FastMCP:
         """Run the due automatic-admission batch. Force is intended for explicit Agent testing; admitted memories retain rollback receipts."""
         return client.request("/api/admission/run", "POST", {"force": bool(force)})
 
+    @server.tool(annotations=read_only)
+    def conversation_prepare(message: str, recent_messages: list[str] | None = None,
+                             area: str | None = None, include_history: bool = False) -> dict:
+        """Recall a small, source-aware context bundle before a host sends the next chat turn. This never writes memory."""
+        payload: dict[str, Any] = {
+            "message": message,
+            "recent_messages": recent_messages or [],
+            "include_history": bool(include_history),
+        }
+        if area is not None:
+            payload["area"] = area
+        return client.request("/api/host/turn/prepare", "POST", payload)
+
+    @server.tool(annotations=reversible_write)
+    def conversation_commit(assistant_text: str, default_admission_mode: str = "candidate") -> dict:
+        """Persist explicit dwell-memory blocks after a turn and return the user-visible text with those blocks removed."""
+        return client.request("/api/host/turn/commit", "POST", {
+            "assistant_text": assistant_text,
+            "default_admission_mode": default_admission_mode,
+        })
+
     @server.tool(annotations=reversible_write)
     def candidate_decide(candidate_id: str, action: str) -> dict:
         """Ignore an unneeded candidate or restore an ignored candidate to pending. Ignoring does not deny that the event happened."""

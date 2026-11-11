@@ -28,6 +28,7 @@ comparison with the previous frontend and the rollback procedure, read
 | --- | --- | --- | --- |
 | Health and overview | `GET /api/health`, `/api/overview` | public health; API auth for overview | read only |
 | Recall and search | `GET /api/search`, `/api/recall/layered`, `/api/dwell-v2/layered-recall` | API auth | read only; semantic failure must degrade cleanly |
+| Host conversation bridge | `POST /api/host/turn/prepare`, `/api/host/turn/commit` | API auth | prepare is read only; commit accepts explicit memory markers and returns visible text |
 | Candidates and admission | `/api/candidates*`, `/api/admission/*`, `/api/dwell-v2/candidates`, `/api/dwell-v2/queue` | API auth | candidate by default; reversible scheduled or Agent-direct admission |
 | Memory governance | `/api/memories*`, `/api/dwell-v2/actions/*`, `/api/dwell-v2/rollbacks*` | API auth | preview/execute for high-impact UI actions |
 | Identity and relations | `/api/profile`, `/api/self-core*`, `/api/user-profile*`, `/api/relations*` | API auth | source-aware reversible writes |

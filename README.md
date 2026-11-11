@@ -2,7 +2,7 @@
 
 > The sanitized standalone beta is available in-tree. See the [standalone beta guide](docs/beta-standalone.md); it uses synthetic examples and relative data paths, never our private production instance.
 
-Current prerelease: `v0.3.0-beta.16`. Chinese first-time testers can follow the [ten-minute first-run guide](docs/first-run.zh-CN.md); existing installations can use the [safe upgrade guide](docs/upgrade.zh-CN.md).
+Current prerelease: `v0.3.0-beta.17`. Chinese first-time testers can follow the [ten-minute first-run guide](docs/first-run.zh-CN.md); existing installations can use the [safe upgrade guide](docs/upgrade.zh-CN.md).
 
 <p align="center">
   <img src="assets/moraine-stone.png" width="220" alt="Moraine stone mark with layered mineral veins">
@@ -108,7 +108,7 @@ service:
 curl http://127.0.0.1:4790/api/health
 ```
 
-See [`docs/integration.md`](docs/integration.md) for data shapes, APIs, security boundaries, and systemd setup; [`docs/governance.md`](docs/governance.md) for strength rules; and [`docs/memory-layers.md`](docs/memory-layers.md) for candidate and temporal contracts. Agent operators can start with the [Chinese Agent handbook](docs/agent-handbook.zh-CN.md); release maintainers can use the [backend contract](docs/dwell-release-backend-contract.md) and [Dwell v2-to-release comparison](docs/dwell-v2-to-release.zh-CN.md).
+See [`docs/integration.md`](docs/integration.md) for data shapes, APIs, security boundaries, and systemd setup; [`docs/governance.md`](docs/governance.md) for strength rules; and [`docs/memory-layers.md`](docs/memory-layers.md) for candidate and temporal contracts. Agent operators can start with the [Chinese Agent handbook](docs/agent-handbook.zh-CN.md) and [host conversation bridge](docs/host-integration.zh-CN.md); release maintainers can use the [backend contract](docs/dwell-release-backend-contract.md) and [Dwell v2-to-release comparison](docs/dwell-v2-to-release.zh-CN.md).
 
 ## Data and privacy
 

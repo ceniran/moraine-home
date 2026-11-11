@@ -135,6 +135,22 @@ class BetaServerTest(unittest.TestCase):
         self.assertTrue(self.request("/api/admission/status")[1]["enabled"])
         self.assertTrue(self.request("/api/admission/run", "POST", {"force": True})[1]["ran"])
 
+    def test_host_turn_prepare_and_commit(self):
+        prepared = self.request("/api/host/turn/prepare", "POST", {
+            "message": "还记得离线检索吗", "recent_messages": ["我们在说本地搜索"]
+        })[1]
+        self.assertIn("离线检索", prepared["prompt_context"])
+        self.assertFalse(prepared["persisted"])
+        committed = self.request("/api/host/turn/commit", "POST", {
+            "assistant_text": (
+                '正常回复<dwell-memory>{"title":"宿主接线",'
+                '"content":"聊天后送入候选箱","emotion_keywords":["安心"]}</dwell-memory>'
+            )
+        })[1]
+        self.assertEqual(committed["visible_text"], "正常回复")
+        self.assertEqual(committed["persisted_count"], 1)
+        self.assertEqual(self.request("/api/candidates")[1]["items"][-1]["title"], "宿主接线")
+
     def test_profile_policy_and_growth_http_chain(self):
         status, payload = self.request("/api/dwell-v2/profile-recall-policy")
         self.assertEqual(status, 200)

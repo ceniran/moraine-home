@@ -903,7 +903,15 @@ class BetaStore:
         return [{"date": day, "count": counts[day]} for day in sorted(counts)]
 
     def keyword_search(self, query: str, limit: int = 20) -> list[dict]:
-        words = [word.casefold() for word in re.findall(r"[\w\u3400-\u9fff]+", str(query)) if word.strip()]
+        words = []
+        for raw in re.findall(r"[a-zA-Z0-9_]+|[\u3400-\u9fff]+", str(query)):
+            word = raw.casefold().strip()
+            if not word:
+                continue
+            words.append(word)
+            if re.fullmatch(r"[\u3400-\u9fff]{4,}", word):
+                words.extend(word[index:index + 2] for index in range(len(word) - 1))
+        words = list(dict.fromkeys(words))
         if not words:
             raise ValueError("query is required")
         scored = []

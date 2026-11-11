@@ -16,6 +16,7 @@ from .adviser import AdviserSecretStore
 from .aml_adapter import AMLAdapter
 from .beta_store import BetaStore
 from .event_match import propose_event_matches
+from .host_integration import build_turn_query, commit_turn, prepare_turn
 from .topic_router import TopicRegistry, TopicShadowLog, route_topics, workbench_shadow_view
 
 
@@ -536,6 +537,40 @@ def create_beta_server(env: dict[str, str] | None = None):
                             # must never block the authoritative candidate inbox.
                             row = {**row, "topic_shadow_status": "unavailable"}
                     return self._json(201, row)
+                if parsed.path == "/api/host/turn/prepare":
+                    recent_messages = body.get("recent_messages") or []
+                    if not isinstance(recent_messages, list):
+                        raise ValueError("recent_messages must be a list")
+                    message = str(body.get("message") or "")
+                    recall_query = build_turn_query(message, recent_messages)
+                    semantic = search(recall_query, 4)
+                    result = prepare_turn(
+                        store,
+                        message,
+                        recent_messages,
+                        area=str(body.get("area") or "").strip() or None,
+                        include_history=bool(body.get("include_history", False)),
+                        semantic_items=semantic.get("items") or [],
+                    )
+                    result["search_mode"] = semantic.get("mode") or "unavailable"
+                    return self._json(200, result)
+                if parsed.path == "/api/host/turn/commit":
+                    def submit_host_memory(payload: dict) -> dict:
+                        semantic = search(
+                            " ".join((str(payload.get("title") or ""), str(payload.get("content") or ""))),
+                            8,
+                        )
+                        return store.submit_memory(
+                            payload,
+                            semantic_neighbors=semantic.get("items") or [],
+                            semantic_mode=str(semantic.get("mode") or "unavailable"),
+                        )
+
+                    return self._json(200, commit_turn(
+                        str(body.get("assistant_text") or ""),
+                        submit_host_memory,
+                        default_admission_mode=str(body.get("default_admission_mode") or "candidate"),
+                    ))
                 if parsed.path == "/api/admission/run":
                     return self._json(200, store.run_automatic_admission(force=bool(body.get("force", False))))
                 if parsed.path == "/api/dwell-v2/queue":

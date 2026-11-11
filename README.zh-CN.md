@@ -2,7 +2,7 @@
 
 > 纯净内测工作台已经可以独立运行：参见 [独立版启动说明](docs/beta-standalone.zh-CN.md)。第一次让小机入住时，可把 [给小机的 Moraine 使用说明](docs/agent-guide.zh-CN.md) 交给它阅读。纯净版只使用合成示例和相对数据目录，不读取我们的私人生产实例。
 
-第一次安装请直接照着[十分钟首次使用](docs/first-run.zh-CN.md)操作；已有实例请按[安全升级说明](docs/upgrade.zh-CN.md)更新。当前内测版本为 `v0.3.0-beta.16`。
+第一次安装请直接照着[十分钟首次使用](docs/first-run.zh-CN.md)操作；已有实例请按[安全升级说明](docs/upgrade.zh-CN.md)更新。当前内测版本为 `v0.3.0-beta.17`。
 
 <p align="center">
   <img src="assets/moraine-stone.png" width="220" alt="带有层状石脉的 Moraine 小石头标记">
@@ -68,6 +68,7 @@ Moraine 只提供安全的自动唤醒预览，不自带定时器、轮换器、
 - systemd 示例、合成数据和不读取私人内容的测试。
 - 独立本地存储与手机 PWA，覆盖事件篮子、五类关系整合、轻量记忆分层、修订、替换、赋权、日历、审计、归档恢复、可追溯 self-core、独立用户画像、通用关系网、分层召回和可迁移导入导出。
 - 可选的本地 MCP 适配器，让记忆库所属的 Agent 获得与人类工作台等价的记忆治理、self-core、用户画像、关系网、分层召回及迁移能力。
+- 通用聊天宿主桥：回复前取回有预算、有来源的少量线索，回复后把 Agent 明确写出的记忆标记送入候选箱或自主直入；普通回复与单条失败互不阻断。
 - 可配置的候选自动入库批次、小机自主直接入库，以及零个或多个普通情绪关键词；所有正式写入保留审计与可回退路径。
 
 ## 它适合谁
@@ -113,7 +114,7 @@ curl http://127.0.0.1:4790/api/health
 
 完整数据格式、接口、安全边界与 systemd 示例见 [`docs/integration.md`](docs/integration.md)。记忆强度规则见 [`docs/governance.md`](docs/governance.md)，候选层与时间模型见 [`docs/memory-layers.md`](docs/memory-layers.md)。
 
-若要让 Codex 等支持 MCP 的本地 Agent 使用纯净工作台，请先启动 `moraine-beta`，再安装 `pip install -e '.[mcp]'` 并运行 `moraine-mcp`。完整配置与工具边界见[纯净内测版说明](docs/beta-standalone.zh-CN.md#让-agent-通过-mcp-使用)。
+若要让 Codex 等支持 MCP 的本地 Agent 使用纯净工作台，请先启动 `moraine-beta`，再安装 `pip install -e '.[mcp]'` 并运行 `moraine-mcp`。完整配置与工具边界见[纯净内测版说明](docs/beta-standalone.zh-CN.md#让-agent-通过-mcp-使用)；要接进 Telegram 或其他聊天桥，见[真实聊天接线说明](docs/host-integration.zh-CN.md)。
 
 ## 数据与隐私
 

@@ -18,6 +18,10 @@ Moraine 保存可检查、可修订、可迁移的记忆材料；Agent 仍负责
 
 ## 每次对话怎么使用
 
+若宿主希望把召回与写入直接接入每一轮聊天，可使用
+[`/api/host/turn/prepare` 与 `/api/host/turn/commit`](host-integration.zh-CN.md)，或 MCP 的
+`conversation_prepare`、`conversation_commit`。下面各节仍是这条自动接线背后的治理规则。
+
 ### 1. 需要旧信息时先召回
 
 使用 MCP 工具 `layered_recall(query)`，或调用：
@@ -97,6 +101,7 @@ Content-Type: application/json
 | --- | --- |
 | 查看系统状态 | `system_overview` |
 | 查找相关旧信息 | `memory_search`、`layered_recall` |
+| 接入完整聊天轮次 | `conversation_prepare`、`conversation_commit` |
 | 查看单条记忆 | `memory_get` |
 | 新增待整理材料 | `candidate_add` |
 | 自主直接入库 | `candidate_add(..., admission_mode="direct")` |
