@@ -2,7 +2,7 @@
 
 > The sanitized standalone beta is available in-tree. See the [standalone beta guide](docs/beta-standalone.md); it uses synthetic examples and relative data paths, never our private production instance.
 
-Current prerelease: `v0.3.0-beta.15`. Chinese first-time testers can follow the [ten-minute first-run guide](docs/first-run.zh-CN.md); existing installations can use the [safe upgrade guide](docs/upgrade.zh-CN.md).
+Current prerelease: `v0.3.0-beta.16`. Chinese first-time testers can follow the [ten-minute first-run guide](docs/first-run.zh-CN.md); existing installations can use the [safe upgrade guide](docs/upgrade.zh-CN.md).
 
 <p align="center">
   <img src="assets/moraine-stone.png" width="220" alt="Moraine stone mark with layered mineral veins">
@@ -37,7 +37,7 @@ Moraine provides a safe wakeup preview, not a scheduler, rotation loop, message 
 
 Our real deployment has been used with hundreds of private memories and currently includes:
 
-- event baskets and admission filtering before long-term storage;
+- candidate-first intake, scheduled admission for stable ordinary records, and an owning Agent's explicit direct-admission right;
 - private, deterministic topic evidence plus review-only same-event comparison where keywords are a gate rather than an automatic merge score;
 - a candidate inbox for pending, protected, and deferred material;
 - local vector retrieval combined with exact keyword search;
@@ -65,6 +65,7 @@ The standalone beta now provides the general-purpose parts of this flow and a ze
 - a systemd example, synthetic fixtures, and tests that do not read private data.
 - a standalone local store and mobile PWA covering event baskets, five relation-aware consolidation modes, revision, replacement, weighting, calendar, audit, archive/restore, source-linked self-core, a separate user profile, a generic relationship graph, layered recall, and portable import/export;
 - an optional local MCP adapter that gives the owning Agent the same memory-management surface as the human workbench, including governance, self-core, user profile, relations, layered recall, and portable import/export.
+- configurable automatic-admission batches, reversible Agent-direct admission, and optional multi-value emotion keywords stored as ordinary tags.
 
 ## A good fit for
 

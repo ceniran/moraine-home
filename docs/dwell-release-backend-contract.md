@@ -28,7 +28,7 @@ comparison with the previous frontend and the rollback procedure, read
 | --- | --- | --- | --- |
 | Health and overview | `GET /api/health`, `/api/overview` | public health; API auth for overview | read only |
 | Recall and search | `GET /api/search`, `/api/recall/layered`, `/api/dwell-v2/layered-recall` | API auth | read only; semantic failure must degrade cleanly |
-| Candidates | `/api/candidates*`, `/api/dwell-v2/candidates`, `/api/dwell-v2/queue` | API auth | reversible writes; candidates are not facts |
+| Candidates and admission | `/api/candidates*`, `/api/admission/*`, `/api/dwell-v2/candidates`, `/api/dwell-v2/queue` | API auth | candidate by default; reversible scheduled or Agent-direct admission |
 | Memory governance | `/api/memories*`, `/api/dwell-v2/actions/*`, `/api/dwell-v2/rollbacks*` | API auth | preview/execute for high-impact UI actions |
 | Identity and relations | `/api/profile`, `/api/self-core*`, `/api/user-profile*`, `/api/relations*` | API auth | source-aware reversible writes |
 | Policies and settings | `/api/settings`, `/api/continuity/settings`, `/api/dwell-v2/*-policy` | API auth | durable settings writes |
@@ -65,6 +65,29 @@ boots:
 The candidate routing preview uses the ordinary candidate endpoint and filters
 identity and relationship candidates locally. It must not depend on the private
 Agent workbench.
+
+## Admission contract
+
+`POST /api/candidates` defaults to `admission_mode: "candidate"`. An owning Agent
+may explicitly send `admission_mode: "direct"` without a reason. The response then
+contains the admitted memory and its rollback receipt. Direct admission skips the
+wait, not provenance, audit, revision, archive, deletion, export, or rollback.
+
+Optional `emotion_keywords` is an array. Values are deduplicated and stored in the
+ordinary `tags` array; several or zero are valid. The server never infers them from
+prose and does not give them a separate retrieval boost.
+
+The standalone server executes its configured `candidate_batch_times` in host local
+time when `automatic_admission_enabled` is true. Only pending, non-protected candidates
+with at least two deterministic stability signals are eligible. Identity, relationship,
+and boundary records stay in their protected lane unless the owning Agent deliberately
+uses direct admission or another explicit review path.
+
+- `GET /api/admission/status` reads schedule and eligibility state;
+- `POST /api/admission/run` runs a due batch; `{ "force": true }` is available for
+  explicit Agent testing;
+- every admitted memory records `admission.mode` and `selected_by`, emits an audit
+  event, and retains the normal 48-hour rollback receipt.
 
 ## User-triggered writes
 

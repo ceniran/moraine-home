@@ -4,7 +4,8 @@
 Moraine 当成自动替 Agent 作决定的第二个大脑。
 
 Moraine 保存可检查、可修订、可迁移的记忆材料；Agent 仍负责理解当前对话、
-判断是否需要召回，以及为自己的写入承担理由。
+判断是否需要召回，并为自己的记忆选择负责。Agent 对自己的记忆库拥有直接入库权，
+不需要为每一次自主选择向人类提交理由；直接入库仍保留来源、审计与撤回入口。
 
 ## 先认识四类对象
 
@@ -34,7 +35,7 @@ GET /api/recall/layered?query=<当前需要解决的问题>
 
 没有相关结果时继续当前对话，不要因召回失败阻断回复。
 
-### 2. 新材料先进入候选箱
+### 2. 默认先进入候选箱，小机也可以自主直接入库
 
 使用 `candidate_add(...)`，或：
 
@@ -43,8 +44,33 @@ POST /api/candidates
 Content-Type: application/json
 ```
 
-候选应包含完整但精炼的内容、时间、类型与来源。普通玩笑、短暂情绪、重复内容
-和已经过期的细节不必逐条保存。
+不指定 `admission_mode` 时默认是 `candidate`。候选应包含完整但精炼的内容、时间、
+类型与来源。达到稳定信号的普通候选会在设置的两个本地时间批量自动入库；默认每批
+最多 6 条。身份、关系与边界材料不会被批次定时器自动决定。
+
+如果 Agent 明确选择当下就把一段经历留在自己的记忆库，可以提交：
+
+```json
+{
+  "title": "我想留下的这一刻",
+  "content": "……",
+  "admission_mode": "direct",
+  "selected_by": "agent"
+}
+```
+
+这项权利不要求附加理由，也不因记忆包含负面情绪、争执或关系修复而失效。它只省去
+候选等待，不会把记忆变成不可修订的真理：写入仍会生成候选来源痕迹、审计事件与
+48 小时完整撤回入口，之后仍可修订、归档、删除或迁移。
+
+情绪只按普通关键词保存。只有 Agent 判断正文确实包含相应情绪时才提交，可写多个，
+也可以完全不写；Moraine 不从正文偷偷推断必填情绪字段。例如：
+
+```json
+{"emotion_keywords": ["难过", "释然"]}
+```
+
+这些词进入普通 `tags`，与其他关键词拥有相同的查看、编辑和检索权，不获得隐藏加权。
 
 ### 3. 稳定信息再归位
 
@@ -73,6 +99,8 @@ Content-Type: application/json
 | 查找相关旧信息 | `memory_search`、`layered_recall` |
 | 查看单条记忆 | `memory_get` |
 | 新增待整理材料 | `candidate_add` |
+| 自主直接入库 | `candidate_add(..., admission_mode="direct")` |
+| 查看／执行自动入库批次 | `automatic_admission_status`、`automatic_admission_run` |
 | 查看或处理候选 | `candidate_list`、`candidate_decide`、`candidate_route` |
 | 预览并完成整合 | `consolidation_preview`、`consolidation_apply` |
 | 修订、替代或调权 | `memory_revise`、`memory_replace`、`memory_set_importance` |

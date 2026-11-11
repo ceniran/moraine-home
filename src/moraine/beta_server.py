@@ -10,6 +10,7 @@ import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from time import monotonic
 
 from .adviser import AdviserSecretStore
 from .aml_adapter import AMLAdapter
@@ -444,6 +445,8 @@ def create_beta_server(env: dict[str, str] | None = None):
                     return self._json(200, {"items": store.tiering_suggestions(), "persisted": False})
                 if parsed.path == "/api/candidates":
                     return self._json(200, {"items": store.list_candidates()})
+                if parsed.path == "/api/admission/status":
+                    return self._json(200, store.automatic_admission_status())
                 if parsed.path == "/api/private/topic-routing/topics":
                     if not self._private_topic_authorized():
                         return self._json(403, {"error": "private_topic_capability_required"})
@@ -516,19 +519,25 @@ def create_beta_server(env: dict[str, str] | None = None):
                 body = self._body()
                 if parsed.path == "/api/candidates":
                     semantic = search(" ".join((str(body.get("title") or ""), str(body.get("content") or ""))), 8)
-                    row = store.add_candidate(body, semantic_neighbors=semantic.get("items") or [],
-                                              semantic_mode=str(semantic.get("mode") or "unavailable"))
+                    submitted = store.submit_memory(body, semantic_neighbors=semantic.get("items") or [],
+                                                    semantic_mode=str(semantic.get("mode") or "unavailable"))
+                    row = (submitted["candidate"] if submitted["admission_mode"] == "candidate" else submitted)
                     if topic_routing_enabled:
                         try:
+                            topic_row = submitted.get("candidate") or next(
+                                item for item in store.list_candidates()
+                                if item.get("id") == submitted.get("candidate_id"))
                             topics, snapshot_id = topic_registry.load()
-                            result = route_topics(f"{row.get('title', '')}\n{row.get('content', '')}", topics, snapshot_id)
-                            topic_log.append(row["id"], result)
+                            result = route_topics(f"{topic_row.get('title', '')}\n{topic_row.get('content', '')}", topics, snapshot_id)
+                            topic_log.append(topic_row["id"], result)
                             row = {**row, "topic_shadow_status": "recorded"}
                         except Exception:
                             # Topic routing is advisory. A broken private registry
                             # must never block the authoritative candidate inbox.
                             row = {**row, "topic_shadow_status": "unavailable"}
                     return self._json(201, row)
+                if parsed.path == "/api/admission/run":
+                    return self._json(200, store.run_automatic_admission(force=bool(body.get("force", False))))
                 if parsed.path == "/api/dwell-v2/queue":
                     return self._json(200, {"ok": True, "queue": store.update_workbench_queue(
                         str(body.get("action") or ""), str(body.get("source_id") or ""),
@@ -872,7 +881,24 @@ def create_beta_server(env: dict[str, str] | None = None):
             except Exception as error:
                 return self._json(500, {"error": f"{type(error).__name__}: {error}"})
 
-    return ThreadingHTTPServer((host, port), Handler)
+    class MoraineHTTPServer(ThreadingHTTPServer):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self._last_admission_poll = 0.0
+
+        def service_actions(self):
+            # BaseServer calls this between serve_forever polls. Keeping the
+            # scheduler here avoids a second daemon lifecycle for embedders.
+            current = monotonic()
+            if current - self._last_admission_poll >= 30:
+                self._last_admission_poll = current
+                try:
+                    store.run_automatic_admission()
+                except Exception:
+                    # A scheduler failure must never stop the HTTP workbench.
+                    pass
+
+    return MoraineHTTPServer((host, port), Handler)
 
 
 def main() -> None:

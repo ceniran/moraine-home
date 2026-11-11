@@ -124,6 +124,17 @@ class BetaServerTest(unittest.TestCase):
         replaced = self.request("/api/memories/m1/replace", "POST", {"replacement_id": memory["id"], "reason": "事实发生变化"})[1]
         self.assertEqual(replaced["old"]["state"], "superseded")
 
+    def test_direct_admission_emotion_keywords_and_batch_endpoints(self):
+        direct = self.request("/api/candidates", "POST", {
+            "title": "主动留下", "content": "我想把这一刻留下", "kind": "reflection",
+            "emotion_keywords": ["开心", "感动"], "admission_mode": "direct",
+        })[1]
+        self.assertEqual(direct["admission_mode"], "direct")
+        self.assertEqual(direct["memory"]["tags"], ["开心", "感动"])
+        self.assertEqual(direct["memory"]["admission"]["mode"], "direct")
+        self.assertTrue(self.request("/api/admission/status")[1]["enabled"])
+        self.assertTrue(self.request("/api/admission/run", "POST", {"force": True})[1]["ran"])
+
     def test_profile_policy_and_growth_http_chain(self):
         status, payload = self.request("/api/dwell-v2/profile-recall-policy")
         self.assertEqual(status, 200)

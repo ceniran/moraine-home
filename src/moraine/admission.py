@@ -38,6 +38,9 @@ def classify_candidate(candidate: dict) -> dict:
     else:
         status, lane = ("ready_for_review", "actionable") if eligible else ("held_low_signal", "held_low_signal")
     strength = 0.75 if len(signals) >= 4 else 0.6 if len(signals) == 3 else 0.4 if eligible else None
-    return {"version": 1, "signals": signals, "signal_count": len(signals), "eligible": eligible,
+    return {"version": 2, "signals": signals, "signal_count": len(signals), "eligible": eligible,
             "protected": protected, "status": status, "review_lane": lane,
-            "suggested_importance": strength, "automatic_persistence": False}
+            "suggested_importance": strength,
+            # This is an eligibility signal, not an instruction to the host. The
+            # store-level switch and schedule still decide whether a batch runs.
+            "automatic_persistence": eligible and not protected}

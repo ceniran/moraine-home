@@ -35,7 +35,7 @@ python -m pip install -e '.[mcp]'
 
 ```bash
 . .venv/bin/activate
-python -m pip install --upgrade ./moraine_home-0.3.0b15-py3-none-any.whl
+python -m pip install --upgrade ./moraine_home-0.3.0b16-py3-none-any.whl
 ```
 
 不要新建数据目录。安装完成后按原方式重新启动 `moraine-beta`；若同时使用 MCP，也重启 MCP 客户端以重新载入工具。
@@ -84,6 +84,13 @@ docker compose up -d
 程序升级失败时，先停止服务，把代码、wheel 或镜像退回升级前的版本，再使用原数据目录启动。不要为解决启动错误直接清空数据。
 
 只有新版本确实迁移了数据且无法向后读取时，才从升级前快照恢复；恢复前仍应保留当前故障状态的副本，便于排查。
+
+## v0.3.0-beta.16 的变化
+
+- 新材料仍默认进入候选箱；达到稳定信号且不属于身份、关系、边界的候选，可按两个可配置本地时间自动分批入库；
+- 记忆库所属的小机可用 `admission_mode: direct` 自主直接入库，无需理由，同时保留来源审计与48小时撤回；
+- 新增可选的多值 `emotion_keywords`，写入后就是普通关键词；不要求每条记忆都有，也不从正文自动猜测或单独加权；
+- 新增自动入库状态与执行 API、MCP 工具，并把权利边界和回退语义写入小机说明书。
 
 ## v0.3.0-beta.15 的变化
 

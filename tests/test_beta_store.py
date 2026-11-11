@@ -1,5 +1,6 @@
 import json
 import unittest
+from datetime import datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -116,6 +117,48 @@ class BetaStoreTest(unittest.TestCase):
         store = make_store(self.root)
         candidate = store.add_candidate({"title": "普通聊天", "content": "你好", "kind": "event"})
         self.assertEqual(candidate["admission"]["status"], "held_low_signal")
+
+    def test_emotion_keywords_are_optional_ordinary_multi_tags(self):
+        store = make_store(self.root)
+        plain = store.add_candidate({"title": "散步", "content": "沿着河边走了一圈"})
+        tagged = store.add_candidate({"title": "争执后的修复", "content": "我们吵过，也认真和好了",
+                                      "tags": ["关系"], "emotion_keywords": ["难过", "释然", "难过"]})
+        self.assertEqual(plain["tags"], [])
+        self.assertEqual(tagged["tags"], ["关系", "难过", "释然"])
+        self.assertNotIn("emotion_keywords", tagged)
+
+    def test_agent_can_directly_admit_without_reason_and_keep_rollback(self):
+        store = make_store(self.root)
+        result = store.submit_memory({"title": "我自己的选择", "content": "我决定把它留下",
+                                      "kind": "identity", "admission_mode": "direct"})
+        self.assertEqual(result["admission_mode"], "direct")
+        self.assertEqual(result["memory"]["admission"]["mode"], "direct")
+        self.assertEqual(result["memory"]["admission"]["selected_by"], "agent")
+        self.assertEqual(store.overview()["candidates"], 0)
+        self.assertTrue(result["memory"]["rollback"]["id"])
+
+    def test_automatic_batch_admits_eligible_unprotected_only(self):
+        store = make_store(self.root)
+        durable = store.add_candidate({"title": "发布决定", "content": "我决定完成发布，今后继续维护",
+                                       "kind": "decision"})
+        protected = store.add_candidate({"title": "关系约定", "content": "我们确认关系并约定共同生活",
+                                         "kind": "relationship", "importance": 0.9})
+        low = store.add_candidate({"title": "一句话", "content": "早上好"})
+        self.assertTrue(durable["admission"]["automatic_persistence"])
+        self.assertFalse(protected["admission"]["automatic_persistence"])
+        result = store.run_automatic_admission(force=True)
+        self.assertEqual([row["candidate_id"] for row in result["admitted"]], [durable["id"]])
+        states = {row["id"]: row["state"] for row in store.list_candidates()}
+        self.assertEqual(states[durable["id"]], "admitted")
+        self.assertEqual(states[protected["id"]], "pending")
+        self.assertEqual(states[low["id"]], "pending")
+        self.assertEqual(store.list_memories()[0]["admission"]["mode"], "automatic")
+
+    def test_automatic_batch_waits_for_next_configured_time(self):
+        store = make_store(self.root)
+        created = datetime.fromisoformat(
+            store.snapshot()["created_at"].replace("Z", "+00:00"))
+        self.assertFalse(store.automatic_admission_status(created + timedelta(seconds=1))["due"])
 
     def test_candidate_keywords_are_structured_read_only_evidence(self):
         store = make_store(self.root)

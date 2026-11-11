@@ -108,6 +108,8 @@ class BetaStore:
             "settings": {"review_mode": "autonomous", "candidate_retention_enabled": False,
                          "candidate_retention_hours": 168, "identity_relation_routing": False,
                          "candidate_experience_mode": "off",
+                         "automatic_admission_enabled": True,
+                         "automatic_admission_batch_limit": 6,
                          "candidate_batch_times": ["11:55", "23:55"],
                          "candidate_settlement_time": "23:55", "candidate_stats_days": 6},
         }
@@ -170,6 +172,8 @@ class BetaStore:
             "identity_relation_routing": bool(legacy_settings.get("identity_relation_routing", False)),
             "retain_identity_memory_copy": bool(legacy_settings.get("retain_identity_memory_copy", False)),
             "candidate_experience_mode": str(legacy_settings.get("candidate_experience_mode", "off")),
+            "automatic_admission_enabled": bool(legacy_settings.get("automatic_admission_enabled", True)),
+            "automatic_admission_batch_limit": int(legacy_settings.get("automatic_admission_batch_limit", 6)),
             "candidate_batch_times": list(legacy_settings.get("candidate_batch_times") or ["11:55", "23:55"]),
             "candidate_settlement_time": str(legacy_settings.get("candidate_settlement_time", "23:55")),
             "candidate_stats_days": int(legacy_settings.get("candidate_stats_days", 6)),
@@ -416,6 +420,8 @@ class BetaStore:
             "identity_relation_routing": bool(current.get("identity_relation_routing", False)),
             "retain_identity_memory_copy": bool(current.get("retain_identity_memory_copy", False)),
             "candidate_experience_mode": str(current.get("candidate_experience_mode", "off")),
+            "automatic_admission_enabled": bool(current.get("automatic_admission_enabled", True)),
+            "automatic_admission_batch_limit": int(current.get("automatic_admission_batch_limit", 6)),
             "candidate_batch_times": list(current.get("candidate_batch_times") or ["11:55", "23:55"]),
             "candidate_settlement_time": str(current.get("candidate_settlement_time", "23:55")),
             "candidate_stats_days": int(current.get("candidate_stats_days", 6)),
@@ -442,6 +448,10 @@ class BetaStore:
         stats_days = int(value.get("candidate_stats_days", current.get("candidate_stats_days", 6)))
         if stats_days < 1 or stats_days > 14:
             raise ValueError("candidate_stats_days must be between 1 and 14")
+        batch_limit = int(value.get("automatic_admission_batch_limit",
+                                    current.get("automatic_admission_batch_limit", 6)))
+        if batch_limit < 1 or batch_limit > 100:
+            raise ValueError("automatic_admission_batch_limit must be between 1 and 100")
         now = utc_now()
         with self.lock:
             data = self._read()
@@ -452,6 +462,9 @@ class BetaStore:
                 "identity_relation_routing": bool(value.get("identity_relation_routing", current.get("identity_relation_routing", False))),
                 "retain_identity_memory_copy": bool(value.get("retain_identity_memory_copy", current.get("retain_identity_memory_copy", False))),
                 "candidate_experience_mode": experience_mode,
+                "automatic_admission_enabled": bool(value.get(
+                    "automatic_admission_enabled", current.get("automatic_admission_enabled", True))),
+                "automatic_admission_batch_limit": batch_limit,
                 "candidate_batch_times": batch_times,
                 "candidate_settlement_time": settlement_time,
                 "candidate_stats_days": stats_days,
@@ -910,12 +923,20 @@ class BetaStore:
         if not title or not content:
             raise ValueError("title and content are required")
         now = utc_now()
+        tags = [str(tag).strip()[:60] for tag in list(value.get("tags") or []) if str(tag).strip()]
+        emotion_keywords = value.get("emotion_keywords")
+        if emotion_keywords is not None and not isinstance(emotion_keywords, list):
+            raise ValueError("emotion_keywords must be a list")
+        # Emotion words have exactly the same storage/search rights as any other
+        # tag. They are optional, explicit, and never inferred from prose here.
+        tags.extend(str(tag).strip()[:60] for tag in list(emotion_keywords or []) if str(tag).strip())
+        tags = list(dict.fromkeys(tags))[:20]
         row = {
             "id": str(value.get("id") or f"candidate_{uuid.uuid4().hex[:12]}"),
             "title": title[:200],
             "content": content[:20000],
             "kind": str(value.get("kind") or "event")[:40],
-            "tags": [str(tag)[:60] for tag in list(value.get("tags") or [])[:20]],
+            "tags": tags,
             "occurred_at": str(value.get("occurred_at") or now),
             "created_at": now,
             "state": "pending",
@@ -952,6 +973,25 @@ class BetaStore:
             data["events"].append({"id": uuid.uuid4().hex, "type": "candidate_added", "at": now, "target": row["id"]})
             self._save(data)
         return row
+
+    def submit_memory(self, value: dict, *, semantic_neighbors: list[dict] | None = None,
+                      semantic_mode: str = "unavailable") -> dict:
+        """Submit material through the default inbox or the owning Agent's direct lane.
+
+        Direct admission skips waiting, not audit or reversibility: the candidate
+        trace is immediately concluded and the normal 48-hour rollback is kept.
+        """
+        mode = str(value.get("admission_mode") or "candidate").strip().casefold()
+        if mode not in {"candidate", "direct"}:
+            raise ValueError("admission_mode must be candidate or direct")
+        candidate = self.add_candidate(value, semantic_neighbors=semantic_neighbors,
+                                       semantic_mode=semantic_mode)
+        if mode == "candidate":
+            return {"admission_mode": "candidate", "candidate": candidate}
+        memory = self.admit([candidate["id"]], admission_context={
+            "mode": "direct", "selected_by": str(value.get("selected_by") or "agent")[:120],
+        })
+        return {"admission_mode": "direct", "candidate_id": candidate["id"], "memory": memory}
 
     def consolidation_preview(self, candidate_ids: list[str], relations: dict | None = None) -> dict:
         ids = {str(value) for value in candidate_ids}
@@ -995,7 +1035,7 @@ class BetaStore:
 
     def admit(self, candidate_ids: list[str], title: str | None = None, content: str | None = None,
               relations: dict | None = None, memory_tier: str | None = None,
-              expires_at: str | None = None) -> dict:
+              expires_at: str | None = None, admission_context: dict | None = None) -> dict:
         automatic_tier = False
         ids = {str(value) for value in candidate_ids}
         if not ids:
@@ -1018,6 +1058,9 @@ class BetaStore:
                     raise
                 raise ValueError("expires_at must be an ISO timestamp") from error
         now = utc_now()
+        context = dict(admission_context or {})
+        admission_mode = str(context.get("mode") or "manual")[:40]
+        selected_by = str(context.get("selected_by") or "agent")[:120]
         with self.lock:
             data = self._read()
             selected = [row for row in data["candidates"] if row.get("id") in ids and row.get("state", "pending") == "pending"]
@@ -1060,6 +1103,7 @@ class BetaStore:
                 ],
                 "consolidation": {"method": draft["method"], "removed": draft["removed"], "sentences": draft["sentences"], "relations": draft["relations"]},
                 "versions": [],
+                "admission": {"mode": admission_mode, "selected_by": selected_by, "at": now},
             }
             if memory_tier:
                 memory["memory_tier"] = memory_tier
@@ -1089,9 +1133,72 @@ class BetaStore:
                 "candidate_after": candidate_after,
                 "event_offset_after": len(data["events"]) + 1,
             })
-            data["events"].append({"id": uuid.uuid4().hex, "type": "candidates_admitted", "at": now, "target": memory["id"], "sources": memory["source_candidate_ids"]})
+            data["events"].append({"id": uuid.uuid4().hex, "type": "candidates_admitted", "at": now,
+                                   "target": memory["id"], "sources": memory["source_candidate_ids"],
+                                   "admission_mode": admission_mode, "selected_by": selected_by})
             self._save(data)
         return {**memory, "rollback": {"id": rollback_id, "available_until": available_until, "ttl_hours": 48}}
+
+    def automatic_admission_status(self, now: datetime | None = None) -> dict:
+        """Describe the portable, host-local twice-daily admission schedule."""
+        moment = now or datetime.now().astimezone()
+        if moment.tzinfo is None:
+            moment = moment.replace(tzinfo=timezone.utc)
+        settings = self.settings()
+        scheduled = []
+        for raw in settings["candidate_batch_times"]:
+            hour, minute = (int(part) for part in raw.split(":"))
+            scheduled.append(moment.replace(hour=hour, minute=minute, second=0, microsecond=0))
+        previous = max((item for item in scheduled if item <= moment), default=scheduled[-1] - timedelta(days=1))
+        upcoming = min((item for item in scheduled if item > moment), default=scheduled[0] + timedelta(days=1))
+        events = [row for row in self.list_events(1000) if row.get("type") == "automatic_admission_batch"]
+        last_run_at = events[0].get("at") if events else None
+        last_run = None
+        if last_run_at:
+            last_run = datetime.fromisoformat(str(last_run_at).replace("Z", "+00:00")).astimezone(moment.tzinfo)
+        if last_run is None:
+            created_at = self.snapshot().get("created_at")
+            if created_at:
+                last_run = datetime.fromisoformat(str(created_at).replace("Z", "+00:00")).astimezone(moment.tzinfo)
+        due = bool(settings["automatic_admission_enabled"] and last_run is not None and last_run < previous)
+        pending = [row for row in self.list_candidates()
+                   if row.get("state", "pending") == "pending"
+                   and (row.get("admission") or {}).get("automatic_persistence")]
+        return {"enabled": settings["automatic_admission_enabled"], "due": due,
+                "batch_limit": settings["automatic_admission_batch_limit"],
+                "batch_times": settings["candidate_batch_times"],
+                "time_basis": "host_local_time", "last_run_at": last_run_at,
+                "previous_scheduled_at": previous.isoformat(), "next_run_at": upcoming.isoformat(),
+                "eligible_pending": len(pending)}
+
+    def run_automatic_admission(self, *, force: bool = False, now: datetime | None = None) -> dict:
+        status = self.automatic_admission_status(now)
+        if not status["enabled"]:
+            return {**status, "ran": False, "reason": "disabled", "admitted": [], "failed": []}
+        if not force and not status["due"]:
+            return {**status, "ran": False, "reason": "not_due", "admitted": [], "failed": []}
+        rows = [row for row in self.list_candidates()
+                if row.get("state", "pending") == "pending"
+                and (row.get("admission") or {}).get("automatic_persistence")]
+        rows = rows[:status["batch_limit"]]
+        admitted, failed = [], []
+        for row in rows:
+            try:
+                memory = self.admit([row["id"]], admission_context={
+                    "mode": "automatic", "selected_by": "moraine_scheduler",
+                })
+                admitted.append({"candidate_id": row["id"], "memory_id": memory["id"]})
+            except Exception as error:
+                failed.append({"candidate_id": row["id"], "error": f"{type(error).__name__}: {error}"})
+        at = utc_now()
+        with self.lock:
+            data = self._read()
+            data["events"].append({"id": uuid.uuid4().hex, "type": "automatic_admission_batch",
+                                   "at": at, "target": "candidate_inbox", "force": bool(force),
+                                   "admitted": admitted, "failed": failed})
+            self._save(data)
+        return {**self.automatic_admission_status(now), "ran": True,
+                "admitted": admitted, "failed": failed, "ran_at": at}
 
     def list_rollbacks(self) -> list[dict]:
         now = datetime.now(timezone.utc)

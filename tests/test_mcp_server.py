@@ -57,6 +57,7 @@ class McpToolsTest(unittest.IsolatedAsyncioTestCase):
                     {
                         "system_overview", "memory_list", "memory_search", "memory_get",
                         "candidate_list", "candidate_tiering_suggestions", "candidate_add", "candidate_decide", "candidate_route", "candidate_shred_expired",
+                        "automatic_admission_status", "automatic_admission_run",
                         "consolidation_preview", "consolidation_apply",
                         "rollback_list", "consolidation_rollback",
                         "memory_set_archived", "memory_set_importance", "memory_revise", "memory_replace",
@@ -72,6 +73,13 @@ class McpToolsTest(unittest.IsolatedAsyncioTestCase):
 
                 added = await session.call_tool("candidate_add", {"title": "合成事件", "content": "只用于MCP验收", "tags": ["synthetic"]})
                 candidate = payload(added)
+                direct = payload(await session.call_tool("candidate_add", {
+                    "title": "自主留下", "content": "我选择直接写入", "admission_mode": "direct",
+                    "emotion_keywords": ["开心", "安心"],
+                }))
+                self.assertEqual(direct["admission_mode"], "direct")
+                self.assertEqual(set(direct["memory"]["tags"]), {"开心", "安心"})
+                self.assertTrue(payload(await session.call_tool("automatic_admission_status", {}))["enabled"])
                 tiering = await session.call_tool("candidate_tiering_suggestions", {})
                 self.assertEqual(payload(tiering)["items"][0]["suggested_tier"], "uncertain")
                 durable_added = await session.call_tool("candidate_add", {

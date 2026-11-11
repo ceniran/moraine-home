@@ -116,20 +116,34 @@ def create_mcp(client: MoraineClient) -> FastMCP:
         content: str,
         kind: str = "event",
         tags: list[str] | None = None,
+        emotion_keywords: list[str] | None = None,
         occurred_at: str | None = None,
         basket: str = "agent",
+        admission_mode: str = "candidate",
     ) -> dict:
-        """Place new material in the review queue without making it a long-term memory. Preserve attribution and do not submit secrets unnecessarily."""
+        """Submit memory material. Default is the candidate inbox; the owning Agent may choose direct admission. Emotion keywords are optional ordinary tags, may contain several values, and are never inferred by Moraine."""
         payload: dict[str, Any] = {
             "title": title,
             "content": content,
             "kind": kind,
             "tags": tags or [],
+            "emotion_keywords": emotion_keywords or [],
             "basket": basket,
+            "admission_mode": admission_mode,
         }
         if occurred_at:
             payload["occurred_at"] = occurred_at
         return client.request("/api/candidates", "POST", payload)
+
+    @server.tool(annotations=read_only)
+    def automatic_admission_status() -> dict:
+        """Read whether the portable candidate admission batch is enabled, due, and how many candidates are eligible."""
+        return client.request("/api/admission/status")
+
+    @server.tool(annotations=reversible_write)
+    def automatic_admission_run(force: bool = False) -> dict:
+        """Run the due automatic-admission batch. Force is intended for explicit Agent testing; admitted memories retain rollback receipts."""
+        return client.request("/api/admission/run", "POST", {"force": bool(force)})
 
     @server.tool(annotations=reversible_write)
     def candidate_decide(candidate_id: str, action: str) -> dict:
